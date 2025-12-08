@@ -1,5 +1,5 @@
-# UCSTORE_multilang.py — Full UCstore bot with 4-language support (tg/ru/en/fa)
-# Requires: python-telegram-bot v20+, Python 3.10+
+# UCSTORE_multilang_full.py — Full UCstore bot with 4-language support (tg/ru/en/fa)
+# Requirements: python-telegram-bot v20+, Python 3.10+
 # NOTE: Replace TOKEN with your bot token before running.
 
 from telegram import (
@@ -27,7 +27,7 @@ from typing import Dict, Any
 
 # -------------------- Config --------------------
 TOKEN = "8524676045:AAHXHO6tYovrMAAGxAQZUi2Z-TGFBUPeMyY"  # <-- set your token here
-ADMIN_IDS = [8436218638]  # change as needed
+ADMIN_IDS = [8436218638]  # change if needed
 USERS_FILE = "users.json"
 ORDERS_FILE = "orders.json"
 
@@ -45,6 +45,16 @@ VISA_NUMBER = "4439200020432471"
 SBER_NUMBER = "2202208496090011"
 FREE_UC_CHANNEL = "@marzbon_media"
 
+# Admin info (used for the info command and admin messages)
+ADMIN_INFO = (
+    "UCstore — ин боти расмии фурӯши UC барои PUBG Mobile ва дигар хидматҳои рақамии бозӣ мебошад.\n\n"
+    "🔹 Усулҳо ва хулоса:\n"
+    "- Каталог бо нархҳо\n"
+    "- Пардохт тавассути карта\n"
+    "- Системаҳои фармоиш ва тасдиқ аз ҷониби админ\n"
+    "\nАгар савол ё мушкил доред — бо админ тамос гиред."
+)
+
 # -------------------- Languages --------------------
 LANGS = ["tg", "ru", "en", "fa"]
 LANGUAGE_LABELS = {
@@ -55,9 +65,7 @@ LANGUAGE_LABELS = {
 }
 
 # -------------------- Translations (i18n) --------------------
-# Keys used across the bot. Add/extend as needed.
 TEXTS: Dict[str, Dict[str, str]] = {
-    # prompts and small messages
     "ask_language": {
         "tg": "Лутфан забони худро интихоб кунед:",
         "ru": "Пожалуйста, выберите язык:",
@@ -88,15 +96,12 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "en": "✅ You have been successfully registered!!\n🔑 Your code: {code}",
         "fa": "✅ با موفقیت ثبت شدید!!\n🔑 کد شما: {code}",
     },
-    # main menu title
     "main_menu_title": {
         "tg": "Менюи асосӣ:",
         "ru": "Главное меню:",
         "en": "Main menu:",
         "fa": "منوی اصلی:",
     },
-    # menu buttons (as lists of lists to preserve layout)
-    # We'll store each button label by key and language; later build rows.
     "btn_catalog": {"tg": "🛍 Каталог", "ru": "🛍 Каталог", "en": "🛍 Catalog", "fa": "🛍 کاتالوگ"},
     "btn_wishlist": {"tg": "❤️ Дилхоҳҳо", "ru": "❤️ Избранное", "en": "❤️ Wishlist", "fa": "❤️ علاقه‌مندی‌ها"},
     "btn_cart": {"tg": "🛒 Сабад", "ru": "🛒 Корзина", "en": "🛒 Cart", "fa": "🛒 سبد"},
@@ -104,8 +109,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
     "btn_info": {"tg": "ℹ Маълумот", "ru": "ℹ Информация", "en": "ℹ Info", "fa": "ℹ اطلاعات"},
     "btn_free_uc": {"tg": "🎁 UC ройгон", "ru": "🎁 Бесплатные UC", "en": "🎁 Free UC", "fa": "🎁 UC رایگان"},
     "btn_language": {"tg": "🌐 Забон", "ru": "🌐 Язык", "en": "🌐 Language", "fa": "🌐 زبان"},
-    "btn_admin_panel": {"tg": "👑 Панели админ", "ru": "👑 Панель админа", "en": "👑 Admin panel", "fa": "👑 پنل ادمین"},
-    # other texts
+    "btn_admin_panel": {"tg": "👑 Панели админ", "ru": "👑 Панель администратора", "en": "👑 Admin panel", "fa": "👑 پنل ادمین"},
     "catalog_title": {"tg": "🛍 Каталог:", "ru": "🛍 Каталог:", "en": "🛍 Catalog:", "fa": "🛍 کاتالوگ:"},
     "cart_empty": {"tg": "🛒 Сабад холист.", "ru": "🛒 Корзина пуста.", "en": "🛒 Your cart is empty.", "fa": "🛒 سبد خالی است."},
     "wishlist_empty": {"tg": "❤️ Дилхоҳҳо холист.", "ru": "❤️ Избранное пусто.", "en": "❤️ Wishlist is empty.", "fa": "❤️ لیست علاقه‌مندی خالی است."},
@@ -128,7 +132,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "fa": "لطفاً روش پرداخت را انتخاب کنید:",
     },
     "send_proof": {
-        "tg": "Пас аз пардохт, лутфан квитанцияро ҳамчун акс ё файл ба ин чат фиристед.",
+        "tg": "Пас аз пардохт, лутфан квитансияро ҳамчун акс ё файл ба ин чат фиристед.",
         "ru": "После оплаты, пожалуйста, отправьте квитанцию (скриншот) в этот чат.",
         "en": "After payment, please send the payment proof (screenshot) to this chat.",
         "fa": "پس از پرداخت، لطفاً رسید پرداخت را به صورت عکس یا فایل به این چت ارسال کنید.",
@@ -175,33 +179,16 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "en": "🔗 Send this link to your friends:\n\n{invite}\n\nYou get +2 UC for each friend who registers!",
         "fa": "🔗 این لینک را برای دوستانتان ارسال کنید:\n\n{invite}\n\nبرای هر دوستی که ثبت‌نام کند +2 UC دریافت می‌کنید!",
     },
-    # admin texts
-    "admin_panel_title": {
-        "tg": "⚙️ Панели Администратор",
-        "ru": "⚙️ Панель администратора",
-        "en": "⚙️ Admin panel",
-        "fa": "⚙️ پنل ادمین",
+    "admin_panel_title": {"tg": "⚙️ Панели Администратор", "ru": "⚙️ Панель администратора", "en": "⚙️ Admin panel", "fa": "⚙️ پنل ادمین"},
+    "users_list_title": {"tg": "📋 Рӯйхати корбарон:", "ru": "📋 Список пользователей:", "en": "📋 Users list:", "fa": "📋 لیست کاربران:"},
+    "orders_list_title": {"tg": "📦 Рӯйхати заказҳо:", "ru": "📦 Список заказов:", "en": "📦 Orders list:", "fa": "📦 لیست سفارش‌ها:"},
+    "confirm_deleted_wishlist": {"tg": "🗑️ Аз дилхоҳҳо ҳазф шуд!", "ru": "🗑️ Удалено из избранного!", "en": "🗑️ Removed from wishlist!", "fa": "🗑️ از علاقه‌مندی‌ها حذف شد!"},
+    "info_text": {
+        "tg": "ℹ Маълумот\n\nИн бот барои харидани UC, фармоишҳо ва хизматрасониҳои PUBG Mobile сохта шудааст.",
+        "ru": "ℹ Информация\n\nЭтот бот создан для покупки UC, заказов и услуг PUBG Mobile.",
+        "en": "ℹ Info\n\nThis bot is created for UC purchases, orders and PUBG Mobile services.",
+        "fa": "ℹ اطلاعات\n\nاین ربات برای خرید UC و خدمات PUBG Mobile ساخته شده است.",
     },
-    "users_list_title": {
-        "tg": "📋 Рӯйхати корбарон:",
-        "ru": "📋 Список пользователей:",
-        "en": "📋 Users list:",
-        "fa": "📋 لیست کاربران:",
-    },
-    "orders_list_title": {
-        "tg": "📦 Рӯйхати заказҳо:",
-        "ru": "📦 Список заказов:",
-        "en": "📦 Orders list:",
-        "fa": "📦 لیست سفارش‌ها:",
-    },
-    # confirmations
-    "confirm_deleted_wishlist": {
-        "tg": "🗑️ Аз дилхоҳҳо ҳазф шуд!",
-        "ru": "🗑️ Удалено из избранного!",
-        "en": "🗑️ Removed from wishlist!",
-        "fa": "🗑️ از علاقه‌مندی‌ها حذف شد!",
-    },
-    # etc - add more as needed...
 }
 
 # -------------------- Persistence helpers --------------------
@@ -279,6 +266,7 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row = []
     if row:
         buttons.append(row)
+    # Use Tajik prompt label with globe emoji; users will see language labels
     await update.message.reply_text("🌐 " + t("ask_language", "tg"), reply_markup=InlineKeyboardMarkup(buttons))
 
 
@@ -289,9 +277,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = str(user.id)
 
-    # Handle /start payload for invites: /start=invite_{uid}
-    # If there's an arguments in message.text we can parse (but in PTB start handler does not include payload by default)
-    # We'll use context.args if available (not always)
+    # Handle /start payload for invites: when using context.args (some PTB setups)
     try:
         args = context.args
         if args and len(args) > 0 and args[0].startswith("invite_"):
@@ -318,7 +304,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if row:
         buttons.append(row)
 
-    # default prompt: show Tajik version of prompt so users see it (can change)
     await update.message.reply_text(t("ask_language", "tg"), reply_markup=InlineKeyboardMarkup(buttons))
 
 
@@ -338,7 +323,6 @@ async def set_language_callback(update: Update, context: ContextTypes.DEFAULT_TY
             save_all()
             await query.message.reply_text(f"✔ {LANGUAGE_LABELS.get(code, code)} — {t('main_menu_title', code)}")
         else:
-            # not registered yet - store preferred_lang
             context.user_data["preferred_lang"] = code
             label = LANGUAGE_LABELS.get(code, code)
             await query.message.reply_text(t("lang_selected", code).format(label), reply_markup=ReplyKeyboardRemove())
@@ -349,14 +333,15 @@ async def set_language_callback(update: Update, context: ContextTypes.DEFAULT_TY
         code = data.split("_", 1)[1]
         context.user_data["preferred_lang"] = code
         label = LANGUAGE_LABELS.get(code, code)
-        # Ask for contact with appropriate localized message and contact button
         text = t("lang_selected", code).format(label)
-        contact_button = KeyboardButton("📱 " + ( "Рақами шумо" if code == "tg" else "Контакт" if code == "ru" else "Send contact" if code == "en" else "ارسال مخاطب"), request_contact=True)
+        contact_button = KeyboardButton(
+            "📱 " + ("Рақами шумо" if code == "tg" else "Контакт" if code == "ru" else "Send contact" if code == "en" else "ارسال مخاطب"),
+            request_contact=True,
+        )
         reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
         await query.message.reply_text(text, reply_markup=reply_markup)
         return
 
-    # fallback
     await query.message.reply_text(t("error_generic", "tg"))
 
 
@@ -387,7 +372,6 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_all()
 
-    # inviter handling (if any)
     inviter = context.user_data.get("invited_by")
     if inviter and inviter != user_id and str(inviter) in users_data:
         inv = str(inviter)
@@ -398,13 +382,12 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-    # notify admins
     for admin in ADMIN_IDS:
         try:
             await context.bot.send_message(
                 admin,
                 (
-                    "👤 New user registered!\n\n"
+                    "👤 Нов користувач зареєстрований!\n\n"
                     f"🧑 Name: {user.first_name}\n"
                     f"📱 Phone: {contact.phone_number}\n"
                     f"🔗 @{user.username or '—'}\n"
@@ -415,7 +398,6 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-    # confirm to user in their language
     reg_msg = t("registered_success", preferred_lang).format(code=user_code)
     await update.message.reply_text(reg_msg, reply_markup=ReplyKeyboardRemove())
     await show_main_menu(update.message.chat, user_id)
@@ -447,7 +429,9 @@ async def catalog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row = []
     if row:
         buttons.append(row)
-    buttons.append([InlineKeyboardButton("⬅️ " + {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازگشت"}[lang], callback_data="back_main")])
+    # localized "Back"
+    back_label = {"tg": "Бозгашт", "ru": "Назад", "en": "Back", "fa": "بازگشت"}[lang]
+    buttons.append([InlineKeyboardButton("⬅️ " + back_label, callback_data="back_main")])
 
     await target.reply_text(t("catalog_title", lang), reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -467,10 +451,14 @@ async def select_item_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     user_lang = users_data.get(str(query.from_user.id), {}).get("lang", "tg")
+    add_label = {"tg": "Илова ба сабад", "ru": "В корзину", "en": "Add to cart", "fa": "افزودن به سبد"}[user_lang]
+    wish_label = {"tg": "Ба дилхоҳҳо", "ru": "В избранное", "en": "To wishlist", "fa": "به علاقه‌مندی‌ها"}[user_lang]
+    back_label = {"tg": "Бозгашт", "ru": "Назад", "en": "Back", "fa": "بازگشت"}[user_lang]
+
     buttons = [
-        [InlineKeyboardButton("🛒 " + {"tg":"Илова ба сабад","ru":"В корзину","en":"Add to cart","fa":"افزودن به سبد"}[user_lang], callback_data=f"addcart_{item_id}"),
-         InlineKeyboardButton("❤️ " + {"tg":"Ба дилхоҳҳо","ru":"В избранное","en":"To wishlist","fa":"به علاقه‌مندی‌ها"}[user_lang], callback_data=f"addwish_{item_id}")],
-        [InlineKeyboardButton("⬅️ " + {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازگشت"}[user_lang], callback_data="back_main")],
+        [InlineKeyboardButton("🛒 " + add_label, callback_data=f"addcart_{item_id}"),
+         InlineKeyboardButton("❤️ " + wish_label, callback_data=f"addwish_{item_id}")],
+        [InlineKeyboardButton("⬅️ " + back_label, callback_data="back_main")],
     ]
     await query.message.reply_text(f"🛍 {item['name']} — {item['price']} TJS", reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -486,7 +474,7 @@ async def addcart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_carts.setdefault(user_id, {})
     user_carts[user_id][item_id] = user_carts[user_id].get(item_id, 0) + 1
     lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg":"✅ Ба сабад илова шуд!","ru":"✅ Добавлено в корзину!","en":"✅ Added to cart!","fa":"✅ به سبد اضافه شد!"}[lang])
+    await query.message.reply_text({"tg": "✅ Ба сабад илова шуд!", "ru": "✅ Добавлено в корзину!", "en": "✅ Added to cart!", "fa": "✅ به سبد اضافه شد!"}[lang])
 
 
 async def addwish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -499,7 +487,7 @@ async def addwish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_wishlist.setdefault(user_id, set()).add(item_id)
     lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg":"❤️ Ба дилхоҳҳо илова шуд!","ru":"❤️ Добавлено в избранное!","en":"❤️ Added to wishlist!","fa":"❤️ به علاقه‌مندی اضافه شد!"}[lang])
+    await query.message.reply_text({"tg": "❤️ Ба дилхоҳҳо илова шуд!", "ru": "❤️ Добавлено в избранное!", "en": "❤️ Added to wishlist!", "fa": "❤️ به علاقه‌مندی اضافه شد!"}[lang])
 
 
 async def open_wishlist_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -514,9 +502,11 @@ async def open_wishlist_from_text(update: Update, context: ContextTypes.DEFAULT_
         item = ITEMS.get(i)
         if not item:
             continue
+        add_label = {"tg": "Ба сабад", "ru": "В корзину", "en": "Add to cart", "fa": "افزودن به سبد"}[lang]
+        rem_label = {"tg": "Хок кардан", "ru": "Удалить", "en": "Remove", "fa": "حذف"}[lang]
         buttons = [
-            [InlineKeyboardButton("🛒 " + {"tg":"Ба сабад","ru":"В корзину","en":"Add to cart","fa":"افزودن به سبد"}[lang], callback_data=f"addcart_{i}"),
-             InlineKeyboardButton("🗑️ " + {"tg":"Хок кардан","ru":"Удалить","en":"Remove","fa":"حذف"}[lang], callback_data=f"removewish_{i}")]
+            [InlineKeyboardButton("🛒 " + add_label, callback_data=f"addcart_{i}"),
+             InlineKeyboardButton("🗑️ " + rem_label, callback_data=f"removewish_{i}")]
         ]
         await update.message.reply_text(f"❤️ {item['name']} — {item['price']} TJS", reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -544,7 +534,8 @@ async def show_cart_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(t("cart_empty", lang))
         return
 
-    text = {"tg":"🛍 Маҳсулоти шумо:\n","ru":"🛍 Ваши товары:\n","en":"🛍 Your items:\n","fa":"🛍 موارد شما:\n"}[lang]
+    intro = {"tg": "🛍 Маҳсулоти шумо:\n", "ru": "🛍 Ваши товары:\n", "en": "🛍 Your items:\n", "fa": "🛍 موارد شما:\n"}[lang]
+    text = intro
     total = 0
     for i, qty in cart.items():
         item = ITEMS.get(i)
@@ -553,12 +544,17 @@ async def show_cart_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         subtotal = item["price"] * qty
         total += subtotal
         text += f"- {item['name']} x{qty} = {subtotal} TJS\n"
-    text += f"\n💰 " + {"tg":"Ҳамагӣ:","ru":"Итого:","en":"Total:","fa":"جمع:"}[lang] + f" {total} TJS"
+    total_label = {"tg": "Ҳамагӣ:", "ru": "Итого:", "en": "Total:", "fa": "جمع:"}[lang]
+    text += f"\n💰 {total_label} {total} TJS"
+
+    place_label = {"tg": "Фармоиш додан", "ru": "Оформить заказ", "en": "Place order", "fa": "ثبت سفارش"}[lang]
+    clear_label = {"tg": "Пок кардан", "ru": "Очистить", "en": "Clear", "fa": "پاک کردن"}[lang]
+    back_label = {"tg": "Бозгашт", "ru": "Назад", "en": "Back", "fa": "بازگشت"}[lang]
 
     buttons = [
-        [InlineKeyboardButton("📦 " + {"tg":"Фармоиш додан","ru":"Оформить заказ","en":"Place order","fa":"ثبت سفارش"}[lang], callback_data="checkout"),
-         InlineKeyboardButton("🗑️ " + {"tg":"Пок кардан","ru":"Очистить","en":"Clear","fa":"پاک کردن"}[lang], callback_data="clear_cart")],
-        [InlineKeyboardButton("⬅️ " + {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازگشت"}[lang], callback_data="back_main")],
+        [InlineKeyboardButton("📦 " + place_label, callback_data="checkout"),
+         InlineKeyboardButton("🗑️ " + clear_label, callback_data="clear_cart")],
+        [InlineKeyboardButton("⬅️ " + back_label, callback_data="back_main")],
     ]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -569,7 +565,7 @@ async def clear_cart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = str(query.from_user.id)
     user_carts[user_id] = {}
     lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg":"🧹 Сабад тоза шуд!","ru":"🧹 Корзина очищена!","en":"🧹 Cart cleared!","fa":"🧹 سبد پاک شد!"}[lang])
+    await query.message.reply_text({"tg": "🧹 Сабад тоза шуд!", "ru": "🧹 Корзина очищена!", "en": "🧹 Cart cleared!", "fa": "🧹 سبد پاک شد!"}[lang])
 
 
 async def checkout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -605,13 +601,12 @@ async def get_game_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order["status"] = "choose_payment"
     save_all()
 
-    # two payment options
     buttons = [
         [InlineKeyboardButton("💳 VISA", callback_data=f"pay_visa_{order['id']}")],
         [InlineKeyboardButton("🏦 SberBank", callback_data=f"pay_sber_{order['id']}")],
     ]
     await update.message.reply_text(
-        f"{'Фармоиш'} №{order['id']} \n🎮 ID: {game_id}\n💰 {total} TJS\n\n" + t("payment_choose", lang),
+        f"Фармоиш №{order['id']} \n🎮 ID: {game_id}\n💰 {total} TJS\n\n" + t("payment_choose", lang),
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -753,7 +748,7 @@ async def admin_payment_verify(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.message.reply_text(t("error_generic", "tg"))
 
 
-# -------------------- Payment accept/reject (legacy handlers) --------------------
+# -------------------- Payment accept/reject (legacy) --------------------
 async def callback_payment_accept_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -812,17 +807,24 @@ async def free_uc_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     buttons = []
     if subscribed:
-        buttons.append([InlineKeyboardButton({"tg":"🎲 Гирифтани UC-и рӯзона","ru":"🎲 Ежедневный UC","en":"🎲 Daily UC","fa":"🎲 UC روزانه"}[lang], callback_data="daily_uc")])
-        buttons.append([InlineKeyboardButton({"tg":"📊 UC-и ҷамъшуда","ru":"📊 Накопленные UC","en":"📊 Your UC balance","fa":"📊 موجودی UC"}[lang], callback_data="my_uc")])
-        buttons.append([InlineKeyboardButton({"tg":"🎁 60 UC","ru":"🎁 60 UC","en":"🎁 60 UC","fa":"🎁 60 UC"}[lang], callback_data="claim_60"),
-                         InlineKeyboardButton({"tg":"🎁 325 UC","ru":"🎁 325 UC","en":"🎁 325 UC","fa":"🎁 325 UC"}[lang], callback_data="claim_325")])
+        daily_label = {"tg": "🎲 Гирифтани UC-и рӯзона", "ru": "🎲 Ежедневный UC", "en": "🎲 Daily UC", "fa": "🎲 UC روزانه"}[lang]
+        my_label = {"tg": "📊 UC-и ҷамъшуда", "ru": "📊 Накопленные UC", "en": "📊 Your UC balance", "fa": "📊 موجودی UC"}[lang]
+        buttons.append([InlineKeyboardButton(daily_label, callback_data="daily_uc")])
+        buttons.append([InlineKeyboardButton(my_label, callback_data="my_uc")])
+        buttons.append([InlineKeyboardButton({"tg": "🎁 60 UC", "ru": "🎁 60 UC", "en": "🎁 60 UC", "fa": "🎁 60 UC"}[lang], callback_data="claim_60"),
+                         InlineKeyboardButton({"tg": "🎁 325 UC", "ru": "🎁 325 UC", "en": "🎁 325 UC", "fa": "🎁 325 UC"}[lang], callback_data="claim_325")])
     else:
         channel_url = f"https://t.me/{FREE_UC_CHANNEL.lstrip('@')}"
-        buttons.append([InlineKeyboardButton({"tg":"📢 Обуна шудан","ru":"📢 Подписаться","en":"📢 Subscribe","fa":"📢 اشتراک"}[lang], url=channel_url)])
-        buttons.append([InlineKeyboardButton({"tg":"🔄 Санҷиш","ru":"🔄 Проверить","en":"🔄 Check","fa":"🔄 بررسی"}[lang], callback_data="check_sub_ucfree")])
+        sub_label = {"tg": "📢 Обуна шудан", "ru": "📢 Подписаться", "en": "📢 Subscribe", "fa": "📢 اشتراک"}[lang]
+        check_label = {"tg": "🔄 Санҷиш", "ru": "🔄 Проверить", "en": "🔄 Check", "fa": "🔄 بررسی"}[lang]
+        buttons.append([InlineKeyboardButton(sub_label, url=channel_url)])
+        buttons.append([InlineKeyboardButton(check_label, callback_data="check_sub_ucfree")])
 
-    buttons.append([InlineKeyboardButton({"tg":"🔗 Даъвати дӯстон","ru":"🔗 Пригласить","en":"🔗 Invite friends","fa":"🔗 دعوت"}[lang], callback_data="invite_link")])
-    await chat.send_message({"tg":"🎁 Менюи UC ройгон:","ru":"🎁 Меню бесплатных UC:","en":"🎁 Free UC menu:","fa":"🎁 منوی UC رایگان:"}[lang], reply_markup=InlineKeyboardMarkup(buttons))
+    invite_label = {"tg": "🔗 Даъвати дӯстон", "ru": "🔗 Пригласить", "en": "🔗 Invite friends", "fa": "🔗 دعوت"}[lang]
+    buttons.append([InlineKeyboardButton(invite_label, callback_data="invite_link")])
+
+    free_title = {"tg": "🎁 Менюи UC ройгон:", "ru": "🎁 Меню бесплатных UC:", "en": "🎁 Free UC menu:", "fa": "🎁 منوی UC رایگان:"}[lang]
+    await chat.send_message(free_title, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 async def check_sub_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -848,10 +850,13 @@ async def daily_uc_roll(update: Update, context: ContextTypes.DEFAULT_TYPE):
             last_dt = datetime.datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
             if (now - last_dt).total_seconds() < 24 * 3600:
                 remaining = int((24 * 3600 - (now - last_dt).total_seconds()) // 3600)
-                await q.message.reply_text({"tg":f"⏳ Шумо аллакай UC гирифтед. Ба шумо боз {remaining} соат мондааст.",
-                                            "ru":f"⏳ Вы уже получили UC. Остаётся {remaining} часов.",
-                                            "en":f"⏳ You've already claimed UC. {remaining} hours remaining.",
-                                            "fa":f"⏳ شما قبلاً UC دریافت کرده‌اید. {remaining} ساعت مانده است."}[lang])
+                msg = {
+                    "tg": f"⏳ Шумо аллакай UC гирифтед. Ба шумо боз {remaining} соат мондааст.",
+                    "ru": f"⏳ Вы уже получили UC. Остаётся {remaining} часов.",
+                    "en": f"⏳ You've already claimed UC. {remaining} hours remaining.",
+                    "fa": f"⏳ شما قبلاً UC دریافت کرده‌اید. {remaining} ساعت مانده است.",
+                }[lang]
+                await q.message.reply_text(msg)
                 return
         except Exception:
             pass
@@ -861,10 +866,12 @@ async def daily_uc_roll(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user["last_daily_uc"] = now.strftime("%Y-%m-%d %H:%M:%S")
     users_data[user_id] = user
     save_all()
-    await q.message.reply_text({"tg":f"🎉 Шумо {roll} UC гирифтед!\n📊 Ҳамагӣ: {user['free_uc']} UC",
-                                "ru":f"🎉 Вы получили {roll} UC!\n📊 Всего: {user['free_uc']} UC",
-                                "en":f"🎉 You received {roll} UC!\n📊 Total: {user['free_uc']} UC",
-                                "fa":f"🎉 شما {roll} UC دریافت کردید!\n📊 مجموع: {user['free_uc']} UC"}[lang])
+    await q.message.reply_text({
+        "tg": f"🎉 Шумо {roll} UC гирифтед!\n📊 Ҳамагӣ: {user['free_uc']} UC",
+        "ru": f"🎉 Вы получили {roll} UC!\n📊 Всего: {user['free_uc']} UC",
+        "en": f"🎉 You received {roll} UC!\n📊 Total: {user['free_uc']} UC",
+        "fa": f"🎉 شما {roll} UC دریافت کردید!\n📊 مجموع: {user['free_uc']} UC"
+    }[lang])
 
 
 async def my_uc_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -874,11 +881,11 @@ async def my_uc_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = users_data.get(user_id, {}).get("lang", "tg")
     user = users_data.get(user_id, {})
     amount = user.get("free_uc", 0)
-    btn = InlineKeyboardMarkup([
-        [InlineKeyboardButton({"tg":"🎁 60 UC","ru":"🎁 60 UC","en":"🎁 60 UC","fa":"🎁 60 UC"}[lang], callback_data="claim_60")],
-        [InlineKeyboardButton({"tg":"🎁 325 UC","ru":"🎁 325 UC","en":"🎁 325 UC","fa":"🎁 325 UC"}[lang], callback_data="claim_325")],
-    ])
-    await q.message.reply_text({"tg":f"📊 Шумо доред: {amount} UC","ru":f"📊 У вас: {amount} UC","en":f"📊 You have: {amount} UC","fa":f"📊 شما دارید: {amount} UC"}[lang], reply_markup=btn)
+    btns = [
+        [InlineKeyboardButton({"tg": "🎁 60 UC", "ru": "🎁 60 UC", "en": "🎁 60 UC", "fa": "🎁 60 UC"}[lang], callback_data="claim_60")],
+        [InlineKeyboardButton({"tg": "🎁 325 UC", "ru": "🎁 325 UC", "en": "🎁 325 UC", "fa": "🎁 325 UC"}[lang], callback_data="claim_325")],
+    ]
+    await q.message.reply_text({ "tg": f"📊 Шумо доред: {amount} UC", "ru": f"📊 У вас: {amount} UC", "en": f"📊 You have: {amount} UC", "fa": f"📊 شما دارید: {amount} UC" }[lang], reply_markup=InlineKeyboardMarkup(btns))
 
 
 async def claim_uc_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -892,28 +899,34 @@ async def claim_uc_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user = users_data.get(user_id, {})
     if user.get("free_uc", 0) < needed:
-        await q.message.reply_text({"tg":f"❌ Шумо UC кофӣ надоред. Шумо доред: {user.get('free_uc',0)} UC",
-                                    "ru":f"❌ У вас недостаточно UC. У вас: {user.get('free_uc',0)} UC",
-                                    "en":f"❌ You don't have enough UC. You have: {user.get('free_uc',0)} UC",
-                                    "fa":f"❌ UC کافی ندارید. شما دارید: {user.get('free_uc',0)} UC"}[lang])
+        await q.message.reply_text({
+            "tg": f"❌ Шумо UC кофӣ надоред. Шумо доред: {user.get('free_uc',0)} UC",
+            "ru": f"❌ У вас недостаточно UC. У вас: {user.get('free_uc',0)} UC",
+            "en": f"❌ You don't have enough UC. You have: {user.get('free_uc',0)} UC",
+            "fa": f"❌ UC کافی ندارید. شما دارید: {user.get('free_uc',0)} UC"
+        }[lang])
         return
     context.user_data["awaiting_free_id"] = needed
-    await q.message.reply_text({"tg":"🎮 Лутфан ID-и PUBG-ро ворид кунед (8–15 рақам):",
-                                "ru":"🎮 Введите ваш PUBG ID (8–15 цифр):",
-                                "en":"🎮 Enter your PUBG ID (8–15 digits):",
-                                "fa":"🎮 شناسه PUBG خود را وارد کنید (8–15 عدد):"}[lang])
+    await q.message.reply_text({
+        "tg": "🎮 Лутфан ID-и PUBG-ро ворид кунед (8–15 рақам):",
+        "ru": "🎮 Введите ваш PUBG ID (8–15 цифр):",
+        "en": "🎮 Enter your PUBG ID (8–15 digits):",
+        "fa": "🎮 شناسه PUBG خود را وارد کنید (8–15 عدد):"
+    }[lang])
 
 
 async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "awaiting_free_id" not in context.user_data:
         return
-    t = update.message.text.strip()
+    ttext = update.message.text.strip()
     lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg")
-    if not t.isdigit() or not (8 <= len(t) <= 15):
-        await update.message.reply_text({"tg":"⚠️ Танҳо рақам, аз 8 то 15 рақам! Лутфан дубора кӯшиш кунед.",
-                                        "ru":"⚠️ Только цифры, от 8 до 15 цифр! Пожалуйста, повторите.",
-                                        "en":"⚠️ Numbers only, 8–15 digits. Please try again.",
-                                        "fa":"⚠️ فقط عدد، از 8 تا 15 رقم! لطفاً دوباره تلاش کنید."}[lang])
+    if not ttext.isdigit() or not (8 <= len(ttext) <= 15):
+        await update.message.reply_text({
+            "tg": "⚠️ Танҳо рақам, аз 8 то 15 рақам! Лутфан дубора кӯшиш кунед.",
+            "ru": "⚠️ Только цифры, от 8 до 15 цифр! Пожалуйста, повторите.",
+            "en": "⚠️ Numbers only, 8–15 digits. Please try again.",
+            "fa": "⚠️ فقط عدد، از 8 تا 15 رقم! لطفاً دوباره تلاش کنید."
+        }[lang])
         return
     amount = context.user_data.pop("awaiting_free_id")
     user_id = str(update.message.from_user.id)
@@ -935,7 +948,7 @@ async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "total": 0,
         "type": "free_uc",
         "pack": amount,
-        "game_id": t,
+        "game_id": ttext,
         "status": "pending",
         "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -950,14 +963,16 @@ async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("❌ Рад", callback_data=f"admin_reject_free_{order_id}"),
                 ]
             ])
-            await context.bot.send_message(admin, f"📦 Free UC order #{order_id}\n👤 @{order['username']}\n🎮 ID: {t}\n🎁 Pack: {amount} UC", reply_markup=btn)
+            await context.bot.send_message(admin, f"📦 Free UC order #{order_id}\n👤 @{order['username']}\n🎮 ID: {ttext}\n🎁 Pack: {amount} UC", reply_markup=btn)
         except Exception:
             pass
 
-    await update.message.reply_text({"tg":f"🎁 Дархости {amount} UC ба админ фиристода шуд! (Фармоиш №{order_id})",
-                                    "ru":f"🎁 Запрос {amount} UC отправлен админу! (Заказ №{order_id})",
-                                    "en":f"🎁 Request for {amount} UC sent to admin! (Order #{order_id})",
-                                    "fa":f"🎁 درخواست {amount} UC به ادمین ارسال شد! (سفارش #{order_id})"}[lang])
+    await update.message.reply_text({
+        "tg": f"🎁 Дархости {amount} UC ба админ фиристода шуд! (Фармоиш №{order_id})",
+        "ru": f"🎁 Запрос {amount} UC отправлен админу! (Заказ №{order_id})",
+        "en": f"🎁 Request for {amount} UC sent to admin! (Order #{order_id})",
+        "fa": f"🎁 درخواست {amount} UC به ادمین ارسال شد! (سفارش #{order_id})"
+    }[lang])
 
 
 async def admin_confirm_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1013,37 +1028,42 @@ async def admin_panel_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_panel":
         keyboard = [
-            [InlineKeyboardButton({"tg":"👤 Корбарон","ru":"👤 Пользователи","en":"👤 Users","fa":"👤 کاربران"}[lang], callback_data="admin_users")],
-            [InlineKeyboardButton({"tg":"📦 Заказҳо","ru":"📦 Заказы","en":"📦 Orders","fa":"📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
-            [InlineKeyboardButton({"tg":"📢 Расонидани паём","ru":"📢 Трансляция","en":"📢 Broadcast","fa":"📢 پخش"}[lang], callback_data="admin_broadcast")],
-            [InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازگشت"}[lang], callback_data="back_main")],
+            [InlineKeyboardButton({"tg": "👤 Корбарон", "ru": "👤 Пользователи", "en": "👤 Users", "fa": "👤 کاربران"}[lang], callback_data="admin_users")],
+            [InlineKeyboardButton({"tg": "📦 Заказҳо", "ru": "📦 Заказы", "en": "📦 Orders", "fa": "📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
+            [InlineKeyboardButton({"tg": "📢 Расонидани паём", "ru": "📢 Трансляция", "en": "📢 Broadcast", "fa": "📢 پخش"}[lang], callback_data="admin_broadcast")],
+            [InlineKeyboardButton({"tg": "⬅️ Бозгашт", "ru": "⬅️ Назад", "en": "⬅️ Back", "fa": "⬅️ بازگشت"}[lang], callback_data="back_main")],
         ]
         await query.message.edit_text(t("admin_panel_title", lang), reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     if data == "admin_users":
         if not users_data:
-            text = {"tg":"📋 Ҳоло ҳеҷ корбар нест.","ru":"📋 Пока нет пользователей.","en":"📋 No users yet.","fa":"📋 هنوز کاربری ثبت نشده است."}[lang]
+            text = {"tg": "📋 Ҳоло ҳеҷ корбар нест.", "ru": "📋 Пока нет пользователей.", "en": "📋 No users yet.", "fa": "📋 هنوز کاربری ثبت نشده است."}[lang]
         else:
             text = t("users_list_title", lang) + "\n\n"
             for uid, u in users_data.items():
                 text += f"• {u.get('name','—')} — {u.get('phone','—')} (id: {uid})\n"
-        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازگشت"}[lang], callback_data="admin_panel")]]))
+        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازгашт"}[lang], callback_data="admin_panel")]]))
         return
 
     if data == "admin_orders":
         if not orders:
-            text = {"tg":"❗ Ҳоло ҳеҷ заказ нест.","ru":"❗ Пока нет заказов.","en":"❗ No orders yet.","fa":"❗ هنوز سفارشی وجود ندارد."}[lang]
+            text = {"tg": "❗ Ҳоло ҳеҷ заказ нест.", "ru": "❗ Пока нет заказов.", "en": "❗ No orders yet.", "fa": "❗ هنوز سفارشی وجود ندارد."}[lang]
         else:
             text = t("orders_list_title", lang) + "\n\n"
             for o in orders:
                 text += f"#{o['id']} — @{o.get('username') or o.get('user_name','-')} — {o.get('total', o.get('pack',0))} — {o['status']}\n"
-        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازگشت"}[lang], callback_data="admin_panel")]]))
+        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازгашт"}[lang], callback_data="admin_panel")]]))
         return
 
     if data == "admin_broadcast":
         broadcast_mode[user_id] = True
-        await query.message.edit_text({"tg":"✏️ Ҳозир матни паёмро навис — ман онро ба *ҳама корбарҳо* мефиристам.","ru":"✏️ Введите сообщение — я отправлю его всем пользователям.","en":"✏️ Send the message now — I'll deliver it to all users.","fa":"✏️ اکنون متن پیام را وارد کنید — من آن را به همه کاربران ارسال خواهم کرد."}[lang], parse_mode="Markdown")
+        await query.message.edit_text({
+            "tg": "✏️ Ҳозир матни паёмро навис — ман онро ба *ҳама корбарҳо* мефиристам.",
+            "ru": "✏️ Введите сообщение — я отправлю его всем пользователям.",
+            "en": "✏️ Send the message now — I'll deliver it to all users.",
+            "fa": "✏️ اکنون متن پیام را وارد کنید — من آن را به همه کاربران ارسال خواهم کرد."
+        }[lang], parse_mode="Markdown")
         return
 
 
@@ -1075,15 +1095,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == t("btn_cart", lang):
         await show_cart_from_text(update, context)
     elif text == t("btn_info", lang):
-        await update.message.reply_text(ADMIN_INFO)
+        await update.message.reply_text(t("info_text", lang))
     elif text == t("btn_admin_profile", lang):
-        await update.message.reply_text("💬 " + {"tg":"Барои тамос бо админ зер кунед:","ru":"Связаться с админом:","en":"Contact admin:","fa":"برای تماس با ادمین:"}[lang], reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💬 Admin", url=f"tg://user?id={ADMIN_IDS[0]}")]]))
+        await update.message.reply_text(
+            {"tg":"Барои тамос бо админ зер кунед:","ru":"Связаться с админом:","en":"Contact admin:","fa":"برای تماس با ادمین:"}[lang],
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💬 Admin", url=f"tg://user?id={ADMIN_IDS[0]}")]]),
+        )
     elif text == t("btn_admin_panel", lang) and int(user_id) in ADMIN_IDS:
         buttons = [
             [InlineKeyboardButton({"tg":"📋 Рӯйхати корбарон","ru":"📋 Список","en":"📋 Users","fa":"📋 کاربران"}[lang], callback_data="admin_users"),
              InlineKeyboardButton({"tg":"📦 Фармоишҳо","ru":"📦 Заказы","en":"📦 Orders","fa":"📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
             [InlineKeyboardButton({"tg":"📣 Паём ба корбарон","ru":"📣 Рассылка","en":"📣 Broadcast","fa":"📣 پخش"}[lang], callback_data="admin_broadcast")],
-            [InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازگشت"}[lang], callback_data="back_main")],
+            [InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازгашт"}[lang], callback_data="back_main")],
         ]
         await update.message.reply_text({"tg":"👑 Панели админ:","ru":"👑 Панель админа:","en":"👑 Admin panel:","fa":"👑 پنل ادمین:"}[lang], reply_markup=InlineKeyboardMarkup(buttons))
     elif text == t("btn_free_uc", lang):
@@ -1117,7 +1140,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     # Language callbacks
-    if data.startswith("setlang_") or data.startswith("setlang_change_") or data.startswith("setlang_change_"):
+    if data.startswith("setlang_") or data.startswith("setlang_change_"):
         await set_language_callback(update, context)
         return
 
@@ -1175,9 +1198,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
 
 
-# -------------------- Utility functions continued (from earlier version) --------------------
-
-# admin_confirm_callback & admin_reject_callback used in some flows - keep them simple
+# -------------------- Utility functions --------------------
 async def admin_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1224,7 +1245,6 @@ async def admin_reject_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.message.reply_text("Order not found.")
 
 
-# invite link
 async def invite_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -1241,7 +1261,6 @@ async def invite_link_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await q.message.reply_text(t("invite_text", lang).format(invite=invite_url))
 
 
-# _create_order_record (keeps earlier fields)
 def _create_order_record(user_id: str, total: int, extra=None) -> dict:
     order_id = random.randint(10000, 99999)
     order = {
@@ -1264,13 +1283,18 @@ def _create_order_record(user_id: str, total: int, extra=None) -> dict:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.message.from_user.id)
     lang = users_data.get(uid, {}).get("lang", "tg")
-    await update.message.reply_text({"tg":"🆘 Фармонҳо: /start, /help, /about, /users (админ)","ru":"🆘 Команды: /start, /help, /about, /users (админ)","en":"🆘 Commands: /start, /help, /about, /users (admin)","fa":"🆘 فرمان‌ها: /start, /help, /about, /users (ادمین)"}[lang])
+    await update.message.reply_text({
+        "tg": "🆘 Фармонҳо: /start, /help, /about, /users (админ)",
+        "ru": "🆘 Команды: /start, /help, /about, /users (админ)",
+        "en": "🆘 Commands: /start, /help, /about, /users (admin)",
+        "fa": "🆘 فرمان‌ها: /start, /help, /about, /users (ادمین)"
+    }[lang])
 
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.message.from_user.id)
     lang = users_data.get(uid, {}).get("lang", "tg")
-    await update.message.reply_text(ADMIN_INFO)
+    await update.message.reply_text(t("info_text", lang))
 
 
 async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1300,7 +1324,9 @@ async def wishlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(ADMIN_INFO)
+    uid = str(update.message.from_user.id)
+    lang = users_data.get(uid, {}).get("lang", "tg")
+    await update.message.reply_text(t("info_text", lang))
 
 
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1310,10 +1336,10 @@ async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     lang = users_data.get(str(user_id), {}).get("lang", "tg")
     buttons = [
-        [InlineKeyboardButton({"tg":"📋 Рӯйхати корбарон","ru":"📋 Список","en":"📋 Users","fa":"📋 کاربران"}[lang], callback_data="admin_users"),
-         InlineKeyboardButton({"tg":"📦 Фармоишҳо","ru":"📦 Заказы","en":"📦 Orders","fa":"📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
-        [InlineKeyboardButton({"tg":"📣 Паём ба корбарон","ru":"📣 Рассылка","en":"📣 Broadcast","fa":"📣 پخش"}[lang], callback_data="admin_broadcast")],
-        [InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازگشت"}[lang], callback_data="back_main")],
+        [InlineKeyboardButton({"tg": "📋 Рӯйхати корбарон", "ru": "📋 Список", "en": "📋 Users", "fa": "📋 کاربران"}[lang], callback_data="admin_users"),
+         InlineKeyboardButton({"tg": "📦 Фармоишҳо", "ru": "📦 Заказы", "en": "📦 Orders", "fa": "📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
+        [InlineKeyboardButton({"tg": "📣 Паём ба корбарон", "ru": "📣 Рассылка", "en": "📣 Broadcast", "fa": "📣 پخش"}[lang], callback_data="admin_broadcast")],
+        [InlineKeyboardButton({"tg": "⬅️ Бозгашт", "ru": "⬅️ Назад", "en": "⬅️ Back", "fa": "⬅️ بازгашт"}[lang], callback_data="back_main")],
     ]
     await update.message.reply_text({"tg":"👑 Панели админ:","ru":"👑 Панель админа:","en":"👑 Admin panel:","fa":"👑 پنل ادمین:"}[lang], reply_markup=InlineKeyboardMarkup(buttons))
 
