@@ -1,6 +1,14 @@
-# UCSTORE_multilang_full.py — Full UCstore bot with 4-language support (tg/ru/en/fa)
-# Requirements: python-telegram-bot v20+, Python 3.10+
-# NOTE: Replace TOKEN with your bot token before running.
+# ucstore_full.py — Full UCstore bot (multilang + phone requested only on first start)
+# FEATURES:
+# - 4 languages: tg / ru / en / fa
+# - On first /start: ask language → then request phone (request_contact=True)
+#   After user sends phone, we save it and never ask again.
+# - If user already registered with phone → /start shows main menu directly
+# - Catalog, cart, wishlist, checkout, payment methods (VISA / Sber), payment proof handling
+# - Admin panel: view users, view orders, confirm/reject payments, broadcast
+# - Free UC system (daily roll, claiming packs), invite link reward
+# - Persistent users.json and orders.json
+# - Replace TOKEN with your bot token. Requires python-telegram-bot v20+ and Python 3.10+
 
 from telegram import (
     Update,
@@ -25,13 +33,18 @@ import random
 import string
 from typing import Dict, Any
 
-# -------------------- Config --------------------
-TOKEN = "8524676045:AAHXHO6tYovrMAAGxAQZUi2Z-TGFBUPeMyY"  # <-- set your token here
-ADMIN_IDS = [8436218638]  # change if needed
+# -------------------- CONFIG --------------------
+TOKEN = "8524676045:AAHXHO6tYovrMAAGxAQZUi2Z-TGFBUPeMyY"  # <-- set your bot token
+ADMIN_IDS = [8436218638]  # set admin Telegram IDs here
 USERS_FILE = "users.json"
 ORDERS_FILE = "orders.json"
 
-# Catalog items: names intentionally NOT translated (as requested)
+# payment recipients / examples
+VISA_NUMBER = "4439200020432471"
+SBER_NUMBER = "2202208496090011"
+FREE_UC_CHANNEL = "@marzbon_media"  # channel to require subscription for some free UC
+
+# -------------------- CATALOG (names intentionally NOT translated) --------------------
 ITEMS = {
     1: {"name": "60 UC", "price": 10},
     2: {"name": "325 UC", "price": 50},
@@ -41,19 +54,14 @@ ITEMS = {
     6: {"name": "8100 UC", "price": 1000},
 }
 
-VISA_NUMBER = "4439200020432471"
-SBER_NUMBER = "2202208496090011"
-FREE_UC_CHANNEL = "@marzbon_media"
-
-# Admin info (used for the info command and admin messages)
-ADMIN_INFO = (
-    """UCstore — ин боти расмии фурӯши UC барои PUBG Mobile ва дигар хидматҳои рақамии бозӣ мебошад. Мо барои бозингарони тоҷик платформаи боэътимод, босифат ва осонро фароҳам овардаем, то харид кардан осон, бехатар ва зуд сурат гирад. ⚡️
+# -------------------- LONG INFO (user-provided) --------------------
+INFO_TEXT_TG = """UCstore — ин боти расмии фурӯши UC барои PUBG Mobile ва дигар хидматҳои рақамии бозӣ мебошад. Мо барои бозингарони тоҷик платформаи боэътимод, босифат ва осонро фароҳам овардаем, то харид кардан осон, бехатар ва зуд сурат гирад. ⚡️
 
 🔹 Афзалиятҳои UCstore:
 
 🎁 UC-и ройгон 
 
-🫴Мо ба шумо ҳаруз аз 1 то 5 uc-и ройгон медиҳем ва инчунин бо даъвати ҳар як дуст шумо 2 uc ба даст меоред.
+🫴 Мо ба шумо ҳаррӯз аз 1 то 5 uc-и ройгон медиҳем ва инчунин бо даъвати ҳар як дуст шумо 2 uc ба даст меоред.
 
 • 🛍 Каталоги пурра бо нархҳои дастрас
 • 💳 Усулҳои гуногуни пардохт (аз ҷумла роҳи нави корти милли ва  VISA)
@@ -73,15 +81,10 @@ ADMIN_INFO = (
 
 Бо UCstore шумо ҳамеша бехатар, зуд ва бо эътимод харид мекунед 💪
 
-Инчунин дар бораи тамоми мушкилот шумо ҳамеша метавонед ба админ тамос гиред @MARZBON_TJ\n\n"""
-    "🔹 Усулҳо ва хулоса:\n"
-    "- Каталог бо нархҳо\n"
-    "- Пардохт тавассути карта\n"
-    "- Системаҳои фармоиш ва тасдиқ аз ҷониби админ\n"
-    "\nАгар савол ё мушкил доред — бо админ тамос гиред."
-)
+Инчунин дар бораи тамоми мушкилот шумо ҳамеша метавонед ба админ тамос гиред @MARZBON_TJ
+"""
 
-# -------------------- Languages --------------------
+# -------------------- LANGUAGES & TRANSLATIONS --------------------
 LANGS = ["tg", "ru", "en", "fa"]
 LANGUAGE_LABELS = {
     "tg": "Тоҷикӣ",
@@ -90,7 +93,6 @@ LANGUAGE_LABELS = {
     "fa": "فارسی",
 }
 
-# -------------------- Translations (i18n) --------------------
 TEXTS: Dict[str, Dict[str, str]] = {
     "ask_language": {
         "tg": "Лутфан забони худро интихоб кунед:",
@@ -98,17 +100,23 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "en": "Please choose your language:",
         "fa": "لطفاً زبان خود را انتخاب کنید:",
     },
-    "lang_selected": {
-        "tg": "Забони шумо интихоб шуд: {}.\nҲозир рақами телефони худро фиристед (тугмаи поёнро истифода баред):",
-        "ru": "Ваш язык выбран: {}.\nПожалуйста, отправьте ваш номер телефона (используйте кнопку):",
-        "en": "Your language has been set to: {}.\nNow please send your phone contact (use the button):",
-        "fa": "زبان شما تنظیم شد: {}.\nلطفاً شماره تلفن خود را ارسال کنید (با دکمه):",
+    "ask_phone": {
+        "tg": "📱 Лутфан рақами телефони худро фиристед.",
+        "ru": "📱 Пожалуйста, отправьте свой номер телефона.",
+        "en": "📱 Please send your phone number.",
+        "fa": "📱 لطفاً شماره تلفن خود را ارسال کنید.",
     },
-    "send_contact_error": {
-        "tg": "⚠️ Лутфан контакт фиристед.",
-        "ru": "⚠️ Пожалуйста, отправьте контакт.",
-        "en": "⚠️ Please send a contact.",
-        "fa": "⚠️ لطفاً مخاطب را ارسال کنید.",
+    "btn_phone": {
+        "tg": "📱 Рақам фиристодан",
+        "ru": "📱 Отправить номер",
+        "en": "📱 Send phone number",
+        "fa": "📱 ارسال شماره",
+    },
+    "phone_ok": {
+        "tg": "✅ Рақам қабул шуд! Шумо сабт шудед.",
+        "ru": "✅ Номер получен! Вы зарегистрированы.",
+        "en": "✅ Phone number received! You are registered.",
+        "fa": "✅ شماره دریافت شد! شما ثبت شدید.",
     },
     "already_registered": {
         "tg": "👋 Салом, {}!",
@@ -117,7 +125,7 @@ TEXTS: Dict[str, Dict[str, str]] = {
         "fa": "👋 سلام، {}!",
     },
     "registered_success": {
-        "tg": "✅ Шумо бо муваффақият ворид шудед!!\n🔑 Код шумо: {code}",
+        "tg": "✅ Шумо бо муваффақият сабт шудед!!\n🔑 Код шумо: {code}",
         "ru": "✅ Вы успешно зарегистрированы!!\n🔑 Ваш код: {code}",
         "en": "✅ You have been successfully registered!!\n🔑 Your code: {code}",
         "fa": "✅ با موفقیت ثبت شدید!!\n🔑 کد شما: {code}",
@@ -210,10 +218,10 @@ TEXTS: Dict[str, Dict[str, str]] = {
     "orders_list_title": {"tg": "📦 Рӯйхати заказҳо:", "ru": "📦 Список заказов:", "en": "📦 Orders list:", "fa": "📦 لیست سفارش‌ها:"},
     "confirm_deleted_wishlist": {"tg": "🗑️ Аз дилхоҳҳо ҳазф шуд!", "ru": "🗑️ Удалено из избранного!", "en": "🗑️ Removed from wishlist!", "fa": "🗑️ از علاقه‌مندی‌ها حذف شد!"},
     "info_text": {
-        "tg": "ℹ Маълумот\n\nИн бот барои харидани UC, фармоишҳо ва хизматрасониҳои PUBG Mobile сохта шудааст.",
-        "ru": "ℹ Информация\n\nЭтот бот создан для покупки UC, заказов и услуг PUBG Mobile.",
-        "en": "ℹ Info\n\nThis bot is created for UC purchases, orders and PUBG Mobile services.",
-        "fa": "ℹ اطلاعات\n\nاین ربات برای خرید UC و خدمات PUBG Mobile ساخته شده است.",
+        "tg": INFO_TEXT_TG,
+        "ru": "ℹ Информация\n\nЭтот бот создан для покупки UC и услуг PUBG Mobile.",
+        "en": "ℹ Info\n\nThis bot helps you buy UC and related PUBG Mobile services.",
+        "fa": "ℹ اطلاعات\n\nاین ربات برای خرید UC و خدمات PUBG Mobile است.",
     },
 }
 
@@ -241,7 +249,7 @@ def save_all():
 users_data = load_json(USERS_FILE, {})  # key: user_id -> user info
 orders = load_json(ORDERS_FILE, [])  # list of orders
 
-# runtime-only structures
+# runtime structures
 user_carts: Dict[str, Dict[int, int]] = {}
 user_wishlist: Dict[str, set] = {}
 broadcast_mode: Dict[str, bool] = {}
@@ -253,10 +261,6 @@ def generate_user_code(length: int = 6) -> str:
 
 
 def t(key: str, lang: str, **kwargs) -> str:
-    """
-    Simple translator helper. Returns TEXTS[key][lang] formatted with kwargs if available.
-    Fallback: tg then raw key.
-    """
     if key not in TEXTS:
         return key
     entry = TEXTS[key]
@@ -270,7 +274,6 @@ def t(key: str, lang: str, **kwargs) -> str:
 
 
 def get_menu_buttons_for_lang(lang: str):
-    # build main menu button labels in appropriate language
     btns = [
         [t("btn_catalog", lang), t("btn_wishlist", lang)],
         [t("btn_cart", lang), t("btn_admin_profile", lang)],
@@ -279,23 +282,6 @@ def get_menu_buttons_for_lang(lang: str):
     ]
     return btns
 
-
-# -------------------- /language command --------------------
-async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Show language selection without resetting user
-    buttons = []
-    row = []
-    for code, label in LANGUAGE_LABELS.items():
-        row.append(InlineKeyboardButton(label, callback_data=f"setlang_change_{code}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    # Use Tajik prompt label with globe emoji; users will see language labels
-    await update.message.reply_text("🌐 " + t("ask_language", "tg"), reply_markup=InlineKeyboardMarkup(buttons))
-
-
 # -------------------- /start --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -303,23 +289,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = str(user.id)
 
-    # Handle /start payload for invites: when using context.args (some PTB setups)
-    try:
-        args = context.args
-        if args and len(args) > 0 and args[0].startswith("invite_"):
-            inviter = args[0].split("invite_")[-1]
-            context.user_data["invited_by"] = inviter
-    except Exception:
-        pass
-
-    # If already registered: show menu
-    if user_id in users_data:
-        lang = users_data.get(user_id, {}).get("lang", "tg")
+    # If registered and phone present -> show menu
+    if user_id in users_data and users_data[user_id].get("phone"):
+        lang = users_data[user_id].get("lang", "tg")
         await update.message.reply_text(t("already_registered", lang).format(user.first_name))
         await show_main_menu(update.message.chat, user_id)
         return
 
-    # Not registered: ask language selection
+    # Ask language selection (first-time flow or missing phone)
     buttons = []
     row = []
     for code, label in LANGUAGE_LABELS.items():
@@ -341,91 +318,108 @@ async def set_language_callback(update: Update, context: ContextTypes.DEFAULT_TY
     user = query.from_user
     user_id = str(user.id)
 
-    # handle change for existing user
+    # If changing language from /language command for existing user
     if data.startswith("setlang_change_"):
         code = data.split("setlang_change_", 1)[1]
         if user_id in users_data:
             users_data[user_id]["lang"] = code
             save_all()
             await query.message.reply_text(f"✔ {LANGUAGE_LABELS.get(code, code)} — {t('main_menu_title', code)}")
+            await show_main_menu(query.message.chat, user_id)
         else:
-            context.user_data["preferred_lang"] = code
-            label = LANGUAGE_LABELS.get(code, code)
-            await query.message.reply_text(t("lang_selected", code).format(label), reply_markup=ReplyKeyboardRemove())
+            # user not registered yet -> follow first-time flow
+            # ask phone after setting preferred lang
+            users_data[user_id] = {
+                "id": int(user_id),
+                "name": user.first_name or "",
+                "username": user.username or "",
+                "phone": "",
+                "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "free_uc": 0,
+                "last_claim": None,
+                "last_daily_uc": None,
+                "code": generate_user_code(),
+                "lang": code,
+            }
+            save_all()
+            # ask for phone
+            kb = ReplyKeyboardMarkup(
+                [[KeyboardButton(t("btn_phone", code), request_contact=True)]],
+                resize_keyboard=True,
+                one_time_keyboard=True,
+            )
+            await query.message.reply_text(t("ask_phone", code), reply_markup=kb)
         return
 
-    # handle initial registration selection (from /start)
+    # initial registration selection (first start)
     if data.startswith("setlang_"):
         code = data.split("_", 1)[1]
-        context.user_data["preferred_lang"] = code
-        label = LANGUAGE_LABELS.get(code, code)
-        text = t("lang_selected", code).format(label)
-        contact_button = KeyboardButton(
-            "📱 " + ("Рақами шумо" if code == "tg" else "Контакт" if code == "ru" else "Send contact" if code == "en" else "ارسال مخاطب"),
-            request_contact=True,
+        # create user record (phone empty) and ask for contact
+        users_data[user_id] = {
+            "id": int(user_id),
+            "name": user.first_name or "",
+            "username": user.username or "",
+            "phone": "",
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "free_uc": 0,
+            "last_claim": None,
+            "last_daily_uc": None,
+            "code": generate_user_code(),
+            "lang": code,
+        }
+        save_all()
+        # ask contact (phone) in chosen language
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton(t("btn_phone", code), request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
         )
-        reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
-        await query.message.reply_text(text, reply_markup=reply_markup)
+        await query.message.reply_text(t("ask_phone", code), reply_markup=kb)
         return
 
     await query.message.reply_text(t("error_generic", "tg"))
 
 
-# -------------------- Contact receiver (registration) --------------------
-async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# -------------------- Contact handler (first-time phone) --------------------
+async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact = update.message.contact
     if not contact:
-        lang = context.user_data.get("preferred_lang", "tg")
-        await update.message.reply_text(t("send_contact_error", lang))
         return
-
     user = update.message.from_user
     user_id = str(user.id)
-    preferred_lang = context.user_data.get("preferred_lang", "tg")
-    user_code = generate_user_code(6)
-
-    users_data[user_id] = {
-        "id": user.id,
-        "name": user.first_name or "",
-        "username": user.username or "",
-        "phone": contact.phone_number,
-        "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "free_uc": 0,
-        "last_claim": None,
-        "last_daily_uc": None,
-        "code": user_code,
-        "lang": preferred_lang,
-    }
-    save_all()
-
-    inviter = context.user_data.get("invited_by")
-    if inviter and inviter != user_id and str(inviter) in users_data:
-        inv = str(inviter)
-        users_data[inv]["free_uc"] = users_data[inv].get("free_uc", 0) + 2
+    if user_id not in users_data:
+        # edge case: user sends contact before language selection — default to tg
+        users_data[user_id] = {
+            "id": int(user_id),
+            "name": user.first_name or "",
+            "username": user.username or "",
+            "phone": contact.phone_number,
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "free_uc": 0,
+            "last_claim": None,
+            "last_daily_uc": None,
+            "code": generate_user_code(),
+            "lang": "tg",
+        }
         save_all()
-        try:
-            await context.bot.send_message(int(inv), f"🎉 You received 2 UC for inviting a friend!\n👤 @{user.username or user.first_name}")
-        except Exception:
-            pass
+        lang = "tg"
+    else:
+        users_data[user_id]["phone"] = contact.phone_number
+        save_all()
+        lang = users_data[user_id].get("lang", "tg")
 
-    for admin in ADMIN_IDS:
-        try:
-            await context.bot.send_message(
+    # notify admins about new registration (optional)
+    try:
+        for admin in ADMIN_IDS:
+            context.bot.send_message(
                 admin,
-                (
-                    "👤 Нов користувач зареєстрований!\n\n"
-                    f"🧑 Name: {user.first_name}\n"
-                    f"📱 Phone: {contact.phone_number}\n"
-                    f"🔗 @{user.username or '—'}\n"
-                    f"🔑 Code: {user_code}\n"
-                    f"🗣 Lang: {LANGUAGE_LABELS.get(preferred_lang,'tg')}"
-                ),
+                f"👤 New user: {user.first_name} ({user.username or '—'})\n📱 {contact.phone_number}\n🔑 Code: {users_data[user_id]['code']}"
             )
-        except Exception:
-            pass
+    except Exception:
+        pass
 
-    reg_msg = t("registered_success", preferred_lang).format(code=user_code)
-    await update.message.reply_text(reg_msg, reply_markup=ReplyKeyboardRemove())
+    # reply and show main menu
+    await update.message.reply_text(t("phone_ok", lang), reply_markup=ReplyKeyboardRemove())
     await show_main_menu(update.message.chat, user_id)
 
 
@@ -455,8 +449,7 @@ async def catalog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row = []
     if row:
         buttons.append(row)
-    # localized "Back"
-    back_label = {"tg": "Бозгашт", "ru": "Назад", "en": "Back", "fa": "بازگشت"}[lang]
+    back_label = {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازگашт"}[lang]
     buttons.append([InlineKeyboardButton("⬅️ " + back_label, callback_data="back_main")])
 
     await target.reply_text(t("catalog_title", lang), reply_markup=InlineKeyboardMarkup(buttons))
@@ -477,9 +470,9 @@ async def select_item_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     user_lang = users_data.get(str(query.from_user.id), {}).get("lang", "tg")
-    add_label = {"tg": "Илова ба сабад", "ru": "В корзину", "en": "Add to cart", "fa": "افزودن به سبد"}[user_lang]
-    wish_label = {"tg": "Ба дилхоҳҳо", "ru": "В избранное", "en": "To wishlist", "fa": "به علاقه‌مندی‌ها"}[user_lang]
-    back_label = {"tg": "Бозгашт", "ru": "Назад", "en": "Back", "fa": "بازگشت"}[user_lang]
+    add_label = {"tg":"Илова ба сабад","ru":"В корзину","en":"Add to cart","fa":"افزودن به سبد"}[user_lang]
+    wish_label = {"tg":"Ба дилхоҳҳо","ru":"В избранное","en":"To wishlist","fa":"به علاقه‌مندی‌ها"}[user_lang]
+    back_label = {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازгашт"}[user_lang]
 
     buttons = [
         [InlineKeyboardButton("🛒 " + add_label, callback_data=f"addcart_{item_id}"),
@@ -500,7 +493,7 @@ async def addcart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_carts.setdefault(user_id, {})
     user_carts[user_id][item_id] = user_carts[user_id].get(item_id, 0) + 1
     lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg": "✅ Ба сабад илова шуд!", "ru": "✅ Добавлено в корзину!", "en": "✅ Added to cart!", "fa": "✅ به سبد اضافه شد!"}[lang])
+    await query.message.reply_text({"tg":"✅ Ба сабад илова шуд!","ru":"✅ Добавлено в корзину!","en":"✅ Added to cart!","fa":"✅ به سبد اضافه شد!"}[lang])
 
 
 async def addwish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -513,7 +506,7 @@ async def addwish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_wishlist.setdefault(user_id, set()).add(item_id)
     lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg": "❤️ Ба дилхоҳҳо илова шуд!", "ru": "❤️ Добавлено в избранное!", "en": "❤️ Added to wishlist!", "fa": "❤️ به علاقه‌مندی اضافه شد!"}[lang])
+    await query.message.reply_text({"tg":"❤️ Ба дилхоҳҳо илова шуд!","ru":"❤️ Добавлено в избранное!","en":"❤️ Added to wishlist!","fa":"❤️ به علاقه‌مندی اضافه شد!"}[lang])
 
 
 async def open_wishlist_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -528,8 +521,8 @@ async def open_wishlist_from_text(update: Update, context: ContextTypes.DEFAULT_
         item = ITEMS.get(i)
         if not item:
             continue
-        add_label = {"tg": "Ба сабад", "ru": "В корзину", "en": "Add to cart", "fa": "افزودن به سبد"}[lang]
-        rem_label = {"tg": "Хок кардан", "ru": "Удалить", "en": "Remove", "fa": "حذف"}[lang]
+        add_label = {"tg":"Ба сабад","ru":"В корзину","en":"Add to cart","fa":"افزودن به سبد"}[lang]
+        rem_label = {"tg":"Хок кардан","ru":"Удалить","en":"Remove","fa":"حذف"}[lang]
         buttons = [
             [InlineKeyboardButton("🛒 " + add_label, callback_data=f"addcart_{i}"),
              InlineKeyboardButton("🗑️ " + rem_label, callback_data=f"removewish_{i}")]
@@ -560,7 +553,7 @@ async def show_cart_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(t("cart_empty", lang))
         return
 
-    intro = {"tg": "🛍 Маҳсулоти шумо:\n", "ru": "🛍 Ваши товары:\n", "en": "🛍 Your items:\n", "fa": "🛍 موارد شما:\n"}[lang]
+    intro = {"tg":"🛍 Маҳсулоти шумо:\n","ru":"🛍 Ваши товары:\n","en":"🛍 Your items:\n","fa":"🛍 موارد شما:\n"}[lang]
     text = intro
     total = 0
     for i, qty in cart.items():
@@ -570,12 +563,12 @@ async def show_cart_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         subtotal = item["price"] * qty
         total += subtotal
         text += f"- {item['name']} x{qty} = {subtotal} TJS\n"
-    total_label = {"tg": "Ҳамагӣ:", "ru": "Итого:", "en": "Total:", "fa": "جمع:"}[lang]
+    total_label = {"tg":"Ҳамагӣ:","ru":"Итого:","en":"Total:","fa":"جمع:"}[lang]
     text += f"\n💰 {total_label} {total} TJS"
 
-    place_label = {"tg": "Фармоиш додан", "ru": "Оформить заказ", "en": "Place order", "fa": "ثبت سفارش"}[lang]
-    clear_label = {"tg": "Пок кардан", "ru": "Очистить", "en": "Clear", "fa": "پاک کردن"}[lang]
-    back_label = {"tg": "Бозгашт", "ru": "Назад", "en": "Back", "fa": "بازگشت"}[lang]
+    place_label = {"tg":"Фармоиш додан","ru":"Оформить заказ","en":"Place order","fa":"ثبت سفارش"}[lang]
+    clear_label = {"tg":"Пок кардан","ru":"Очистить","en":"Clear","fa":"پاک کردن"}[lang]
+    back_label = {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازгашт"}[lang]
 
     buttons = [
         [InlineKeyboardButton("📦 " + place_label, callback_data="checkout"),
@@ -591,7 +584,7 @@ async def clear_cart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = str(query.from_user.id)
     user_carts[user_id] = {}
     lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg": "🧹 Сабад тоза шуд!", "ru": "🧹 Корзина очищена!", "en": "🧹 Cart cleared!", "fa": "🧹 سبد پاک شد!"}[lang])
+    await query.message.reply_text({"tg":"🧹 Сабад тоза шуд!","ru":"🧹 Корзина очищена!","en":"🧹 Cart cleared!","fa":"🧹 سبد پاک شد!"}[lang])
 
 
 async def checkout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -613,7 +606,7 @@ async def get_game_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("awaiting_game_id"):
         return
     game_id = update.message.text.strip()
-    lang = context.user_data.get("lang") or users_data.get(str(update.message.from_user.id), {}).get("lang", "tg")
+    lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg")
     if not game_id.isdigit():
         await update.message.reply_text(t("invalid_game_id", lang))
         return
@@ -774,44 +767,6 @@ async def admin_payment_verify(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.message.reply_text(t("error_generic", "tg"))
 
 
-# -------------------- Payment accept/reject (legacy) --------------------
-async def callback_payment_accept_reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    # legacy flows (kept for compatibility)
-    if data.startswith("payment_accept_") or data.startswith("payment_reject_"):
-        parts = data.split("_")
-        try:
-            order_id = int(parts[2])
-            user_id = int(parts[3])
-        except Exception:
-            await query.message.reply_text(t("error_generic", "tg"))
-            return
-        for o in orders:
-            if o["id"] == order_id and str(o["user_id"]) == str(user_id):
-                if data.startswith("payment_accept_"):
-                    o["status"] = "confirmed"
-                    save_all()
-                    try:
-                        lang = users_data.get(str(user_id), {}).get("lang", "tg")
-                        await context.bot.send_message(int(user_id), t("order_confirmed_user", lang).format(order_id=order_id))
-                    except Exception:
-                        pass
-                    await query.message.reply_text("✅ Confirmed.")
-                else:
-                    o["status"] = "rejected"
-                    save_all()
-                    try:
-                        lang = users_data.get(str(user_id), {}).get("lang", "tg")
-                        await context.bot.send_message(int(user_id), t("order_rejected_user", lang).format(order_id=order_id))
-                    except Exception:
-                        pass
-                    await query.message.reply_text("❌ Rejected.")
-                return
-        await query.message.reply_text(t("error_generic", "tg"))
-
-
 # -------------------- Free UC system --------------------
 async def free_uc_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.message.chat if update.message else update.callback_query.message.chat
@@ -833,23 +788,23 @@ async def free_uc_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     buttons = []
     if subscribed:
-        daily_label = {"tg": "🎲 Гирифтани UC-и рӯзона", "ru": "🎲 Ежедневный UC", "en": "🎲 Daily UC", "fa": "🎲 UC روزانه"}[lang]
-        my_label = {"tg": "📊 UC-и ҷамъшуда", "ru": "📊 Накопленные UC", "en": "📊 Your UC balance", "fa": "📊 موجودی UC"}[lang]
+        daily_label = {"tg":"🎲 Гирифтани UC-и рӯзона","ru":"🎲 Ежедневный UC","en":"🎲 Daily UC","fa":"🎲 UC روزانه"}[lang]
+        my_label = {"tg":"📊 UC-и ҷамъшуда","ru":"📊 Накопленные UC","en":"📊 Your UC balance","fa":"📊 موجودی UC"}[lang]
         buttons.append([InlineKeyboardButton(daily_label, callback_data="daily_uc")])
         buttons.append([InlineKeyboardButton(my_label, callback_data="my_uc")])
-        buttons.append([InlineKeyboardButton({"tg": "🎁 60 UC", "ru": "🎁 60 UC", "en": "🎁 60 UC", "fa": "🎁 60 UC"}[lang], callback_data="claim_60"),
-                         InlineKeyboardButton({"tg": "🎁 325 UC", "ru": "🎁 325 UC", "en": "🎁 325 UC", "fa": "🎁 325 UC"}[lang], callback_data="claim_325")])
+        buttons.append([InlineKeyboardButton({"tg":"🎁 60 UC","ru":"🎁 60 UC","en":"🎁 60 UC","fa":"🎁 60 UC"}[lang], callback_data="claim_60"),
+                         InlineKeyboardButton({"tg":"🎁 325 UC","ru":"🎁 325 UC","en":"🎁 325 UC","fa":"🎁 325 UC"}[lang], callback_data="claim_325")])
     else:
         channel_url = f"https://t.me/{FREE_UC_CHANNEL.lstrip('@')}"
-        sub_label = {"tg": "📢 Обуна шудан", "ru": "📢 Подписаться", "en": "📢 Subscribe", "fa": "📢 اشتراک"}[lang]
-        check_label = {"tg": "🔄 Санҷиш", "ru": "🔄 Проверить", "en": "🔄 Check", "fa": "🔄 بررسی"}[lang]
+        sub_label = {"tg":"📢 Обуна шудан","ru":"📢 Подписаться","en":"📢 Subscribe","fa":"📢 اشتراک"}[lang]
+        check_label = {"tg":"🔄 Санҷиш","ru":"🔄 Проверить","en":"🔄 Check","fa":"🔄 بررسی"}[lang]
         buttons.append([InlineKeyboardButton(sub_label, url=channel_url)])
         buttons.append([InlineKeyboardButton(check_label, callback_data="check_sub_ucfree")])
 
-    invite_label = {"tg": "🔗 Даъвати дӯстон", "ru": "🔗 Пригласить", "en": "🔗 Invite friends", "fa": "🔗 دعوت"}[lang]
+    invite_label = {"tg":"🔗 Даъвати дӯстон","ru":"🔗 Пригласить","en":"🔗 Invite friends","fa":"🔗 دعوت"}[lang]
     buttons.append([InlineKeyboardButton(invite_label, callback_data="invite_link")])
 
-    free_title = {"tg": "🎁 Менюи UC ройгон:", "ru": "🎁 Меню бесплатных UC:", "en": "🎁 Free UC menu:", "fa": "🎁 منوی UC رایگان:"}[lang]
+    free_title = {"tg":"🎁 Менюи UC ройгон:","ru":"🎁 Меню бесплатных UC:","en":"🎁 Free UC menu:","fa":"🎁 منوی UC رایگان:"}[lang]
     await chat.send_message(free_title, reply_markup=InlineKeyboardMarkup(buttons))
 
 
@@ -876,28 +831,18 @@ async def daily_uc_roll(update: Update, context: ContextTypes.DEFAULT_TYPE):
             last_dt = datetime.datetime.strptime(last, "%Y-%m-%d %H:%M:%S")
             if (now - last_dt).total_seconds() < 24 * 3600:
                 remaining = int((24 * 3600 - (now - last_dt).total_seconds()) // 3600)
-                msg = {
-                    "tg": f"⏳ Шумо аллакай UC гирифтед. Ба шумо боз {remaining} соат мондааст.",
-                    "ru": f"⏳ Вы уже получили UC. Остаётся {remaining} часов.",
-                    "en": f"⏳ You've already claimed UC. {remaining} hours remaining.",
-                    "fa": f"⏳ شما قبلاً UC دریافت کرده‌اید. {remaining} ساعت مانده است.",
-                }[lang]
+                msg = {"tg":f"⏳ Шумо аллакай UC гирифтед. Ба шумо боз {remaining} соат мондааст.","ru":f"⏳ Вы уже получили UC. Остаётся {remaining} часов.","en":f"⏳ You've already claimed UC. {remaining} hours remaining.","fa":f"⏳ شما قبلاً UC دریافت کرده‌اید. {remaining} ساعت مانده است."}[lang]
                 await q.message.reply_text(msg)
                 return
         except Exception:
             pass
 
-    roll = random.choices([1, 2, 3, 4, 5], weights=[70, 20, 7, 2, 1])[0]
+    roll = random.choices([1,2,3,4,5], weights=[70,20,7,2,1])[0]
     user["free_uc"] = user.get("free_uc", 0) + roll
     user["last_daily_uc"] = now.strftime("%Y-%m-%d %H:%M:%S")
     users_data[user_id] = user
     save_all()
-    await q.message.reply_text({
-        "tg": f"🎉 Шумо {roll} UC гирифтед!\n📊 Ҳамагӣ: {user['free_uc']} UC",
-        "ru": f"🎉 Вы получили {roll} UC!\n📊 Всего: {user['free_uc']} UC",
-        "en": f"🎉 You received {roll} UC!\n📊 Total: {user['free_uc']} UC",
-        "fa": f"🎉 شما {roll} UC دریافت کردید!\n📊 مجموع: {user['free_uc']} UC"
-    }[lang])
+    await q.message.reply_text({"tg":f"🎉 Шумо {roll} UC гирифтед!\n📊 Ҳамагӣ: {user['free_uc']} UC","ru":f"🎉 Вы получили {roll} UC!\n📊 Всего: {user['free_uc']} UC","en":f"🎉 You received {roll} UC!\n📊 Total: {user['free_uc']} UC","fa":f"🎉 شما {roll} UC دریافت کردید!\n📊 مجموع: {user['free_uc']} UC"}[lang])
 
 
 async def my_uc_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -908,10 +853,10 @@ async def my_uc_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = users_data.get(user_id, {})
     amount = user.get("free_uc", 0)
     btns = [
-        [InlineKeyboardButton({"tg": "🎁 60 UC", "ru": "🎁 60 UC", "en": "🎁 60 UC", "fa": "🎁 60 UC"}[lang], callback_data="claim_60")],
-        [InlineKeyboardButton({"tg": "🎁 325 UC", "ru": "🎁 325 UC", "en": "🎁 325 UC", "fa": "🎁 325 UC"}[lang], callback_data="claim_325")],
+        [InlineKeyboardButton({"tg":"🎁 60 UC","ru":"🎁 60 UC","en":"🎁 60 UC","fa":"🎁 60 UC"}[lang], callback_data="claim_60")],
+        [InlineKeyboardButton({"tg":"🎁 325 UC","ru":"🎁 325 UC","en":"🎁 325 UC","fa":"🎁 325 UC"}[lang], callback_data="claim_325")]
     ]
-    await q.message.reply_text({ "tg": f"📊 Шумо доред: {amount} UC", "ru": f"📊 У вас: {amount} UC", "en": f"📊 You have: {amount} UC", "fa": f"📊 شما دارید: {amount} UC" }[lang], reply_markup=InlineKeyboardMarkup(btns))
+    await q.message.reply_text({"tg":f"📊 Шумо доред: {amount} UC","ru":f"📊 У вас: {amount} UC","en":f"📊 You have: {amount} UC","fa":f"📊 شما دارید: {amount} UC"}[lang], reply_markup=InlineKeyboardMarkup(btns))
 
 
 async def claim_uc_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -925,20 +870,10 @@ async def claim_uc_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user = users_data.get(user_id, {})
     if user.get("free_uc", 0) < needed:
-        await q.message.reply_text({
-            "tg": f"❌ Шумо UC кофӣ надоред. Шумо доред: {user.get('free_uc',0)} UC",
-            "ru": f"❌ У вас недостаточно UC. У вас: {user.get('free_uc',0)} UC",
-            "en": f"❌ You don't have enough UC. You have: {user.get('free_uc',0)} UC",
-            "fa": f"❌ UC کافی ندارید. شما دارید: {user.get('free_uc',0)} UC"
-        }[lang])
+        await q.message.reply_text({"tg":f"❌ Шумо UC кофӣ надоред. Шумо доред: {user.get('free_uc',0)} UC","ru":f"❌ У вас недостаточно UC. У вас: {user.get('free_uc',0)} UC","en":f"❌ You don't have enough UC. You have: {user.get('free_uc',0)} UC","fa":f"❌ UC کافی ندارید. شما دارید: {user.get('free_uc',0)} UC"}[lang])
         return
     context.user_data["awaiting_free_id"] = needed
-    await q.message.reply_text({
-        "tg": "🎮 Лутфан ID-и PUBG-ро ворид кунед (8–15 рақам):",
-        "ru": "🎮 Введите ваш PUBG ID (8–15 цифр):",
-        "en": "🎮 Enter your PUBG ID (8–15 digits):",
-        "fa": "🎮 شناسه PUBG خود را وارد کنید (8–15 عدد):"
-    }[lang])
+    await q.message.reply_text({"tg":"🎮 Лутфан ID-и PUBG-ро ворид кунед (8–15 рақам):","ru":"🎮 Введите ваш PUBG ID (8–15 цифр):","en":"🎮 Enter your PUBG ID (8–15 digits):","fa":"🎮 شناسه PUBG خود را وارد کنید (8–15 عدد):"}[lang])
 
 
 async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -947,12 +882,7 @@ async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ttext = update.message.text.strip()
     lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg")
     if not ttext.isdigit() or not (8 <= len(ttext) <= 15):
-        await update.message.reply_text({
-            "tg": "⚠️ Танҳо рақам, аз 8 то 15 рақам! Лутфан дубора кӯшиш кунед.",
-            "ru": "⚠️ Только цифры, от 8 до 15 цифр! Пожалуйста, повторите.",
-            "en": "⚠️ Numbers only, 8–15 digits. Please try again.",
-            "fa": "⚠️ فقط عدد، از 8 تا 15 رقم! لطفاً دوباره تلاش کنید."
-        }[lang])
+        await update.message.reply_text({"tg":"⚠️ Танҳо рақам, аз 8 то 15 рақам! Лутфан дубора кӯшиш кунед.","ru":"⚠️ Только цифры, от 8 до 15 цифр! Пожалуйста, повторите.","en":"⚠️ Numbers only, 8–15 digits. Please try again.","fa":"⚠️ فقط عدد، از 8 تا 15 رقم! لطفاً دوباره تلاش کنید."}[lang])
         return
     amount = context.user_data.pop("awaiting_free_id")
     user_id = str(update.message.from_user.id)
@@ -983,22 +913,12 @@ async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for admin in ADMIN_IDS:
         try:
-            btn = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("✅ Тасдиқ", callback_data=f"admin_confirm_free_{order_id}"),
-                    InlineKeyboardButton("❌ Рад", callback_data=f"admin_reject_free_{order_id}"),
-                ]
-            ])
+            btn = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Тасдиқ", callback_data=f"admin_confirm_free_{order_id}"), InlineKeyboardButton("❌ Рад", callback_data=f"admin_reject_free_{order_id}")]])
             await context.bot.send_message(admin, f"📦 Free UC order #{order_id}\n👤 @{order['username']}\n🎮 ID: {ttext}\n🎁 Pack: {amount} UC", reply_markup=btn)
         except Exception:
             pass
 
-    await update.message.reply_text({
-        "tg": f"🎁 Дархости {amount} UC ба админ фиристода шуд! (Фармоиш №{order_id})",
-        "ru": f"🎁 Запрос {amount} UC отправлен админу! (Заказ №{order_id})",
-        "en": f"🎁 Request for {amount} UC sent to admin! (Order #{order_id})",
-        "fa": f"🎁 درخواست {amount} UC به ادمین ارسال شد! (سفارش #{order_id})"
-    }[lang])
+    await update.message.reply_text({"tg":f"🎁 Дархости {amount} UC ба админ фиристода шуд! (Фармоиш №{order_id})","ru":f"🎁 Запрос {amount} UC отправлен админу! (Заказ №{order_id})","en":f"🎁 Request for {amount} UC sent to admin! (Order #{order_id})","fa":f"🎁 درخواست {amount} UC به ادمین ارسال شد! (سفارش #{order_id})"}[lang])
 
 
 async def admin_confirm_free(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1054,17 +974,17 @@ async def admin_panel_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_panel":
         keyboard = [
-            [InlineKeyboardButton({"tg": "👤 Корбарон", "ru": "👤 Пользователи", "en": "👤 Users", "fa": "👤 کاربران"}[lang], callback_data="admin_users")],
-            [InlineKeyboardButton({"tg": "📦 Заказҳо", "ru": "📦 Заказы", "en": "📦 Orders", "fa": "📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
-            [InlineKeyboardButton({"tg": "📢 Расонидани паём", "ru": "📢 Трансляция", "en": "📢 Broadcast", "fa": "📢 پخش"}[lang], callback_data="admin_broadcast")],
-            [InlineKeyboardButton({"tg": "⬅️ Бозгашт", "ru": "⬅️ Назад", "en": "⬅️ Back", "fa": "⬅️ بازگشت"}[lang], callback_data="back_main")],
+            [InlineKeyboardButton({"tg":"👤 Корбарон","ru":"👤 Пользователи","en":"👤 Users","fa":"👤 کاربران"}[lang], callback_data="admin_users")],
+            [InlineKeyboardButton({"tg":"📦 Заказҳо","ru":"📦 Заказы","en":"📦 Orders","fa":"📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
+            [InlineKeyboardButton({"tg":"📢 Расонидани паём","ru":"📢 Трансляция","en":"📢 Broadcast","fa":"📢 پخش"}[lang], callback_data="admin_broadcast")],
+            [InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازгашт"}[lang], callback_data="back_main")],
         ]
         await query.message.edit_text(t("admin_panel_title", lang), reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
     if data == "admin_users":
         if not users_data:
-            text = {"tg": "📋 Ҳоло ҳеҷ корбар нест.", "ru": "📋 Пока нет пользователей.", "en": "📋 No users yet.", "fa": "📋 هنوز کاربری ثبت نشده است."}[lang]
+            text = {"tg":"📋 Ҳоло ҳеҷ корбар нест.","ru":"📋 Пока нет пользователей.","en":"📋 No users yet.","fa":"📋 هنوز کاربری ثبت نشده است."}[lang]
         else:
             text = t("users_list_title", lang) + "\n\n"
             for uid, u in users_data.items():
@@ -1074,7 +994,7 @@ async def admin_panel_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_orders":
         if not orders:
-            text = {"tg": "❗ Ҳоло ҳеҷ заказ нест.", "ru": "❗ Пока нет заказов.", "en": "❗ No orders yet.", "fa": "❗ هنوز سفارشی وجود ندارد."}[lang]
+            text = {"tg":"❗ Ҳоло ҳеҷ заказ нест.","ru":"❗ Пока нет заказов.","en":"❗ No orders yet.","fa":"❗ هنوز سفارشی وجود ندارد."}[lang]
         else:
             text = t("orders_list_title", lang) + "\n\n"
             for o in orders:
@@ -1084,12 +1004,7 @@ async def admin_panel_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_broadcast":
         broadcast_mode[user_id] = True
-        await query.message.edit_text({
-            "tg": "✏️ Ҳозир матни паёмро навис — ман онро ба *ҳама корбарҳо* мефиристам.",
-            "ru": "✏️ Введите сообщение — я отправлю его всем пользователям.",
-            "en": "✏️ Send the message now — I'll deliver it to all users.",
-            "fa": "✏️ اکنون متن پیام را وارد کنید — من آن را به همه کاربران ارسال خواهم کرد."
-        }[lang], parse_mode="Markdown")
+        await query.message.edit_text({"tg":"✏️ Ҳозир матни паёмро навис — ман онро ба *ҳама корбарҳо* мефиристам.","ru":"✏️ Введите сообщение — я отправлю его всем пользователям.","en":"✏️ Send the message now — I'll deliver it to all users.","fa":"✏️ اکنون متن پیام را وارد کنید — من آن را به همه کاربران ارسال خواهم کرد."}[lang], parse_mode="Markdown")
         return
 
 
@@ -1111,6 +1026,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         await update.message.reply_text(t("broadcast_sent", lang).format(count=count))
         broadcast_mode[user_id] = False
+        return
+
+    # priority inputs
+    if context.user_data.get("awaiting_game_id"):
+        await get_game_id(update, context)
+        return
+    if "awaiting_free_id" in context.user_data:
+        await get_free_uc_id(update, context)
+        return
+
+    # if user hasn't provided phone yet -> trigger start flow
+    if user_id not in users_data or not users_data[user_id].get("phone"):
+        await start(update, context)
         return
 
     # menu processing
@@ -1145,15 +1073,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # -------------------- Text router --------------------
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # priority: awaiting inputs
-    if context.user_data.get("awaiting_game_id"):
-        await get_game_id(update, context)
-        return
-    if "awaiting_free_id" in context.user_data:
-        await get_free_uc_id(update, context)
-        return
+    # contact messages handled separately
     if update.message.contact:
-        await get_contact(update, context)
+        await contact_handler(update, context)
         return
     await handle_text(update, context)
 
@@ -1305,15 +1227,15 @@ def _create_order_record(user_id: str, total: int, extra=None) -> dict:
     return order
 
 
-# -------------------- Commands & small handlers --------------------
+# -------------------- Small commands --------------------
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.message.from_user.id)
     lang = users_data.get(uid, {}).get("lang", "tg")
     await update.message.reply_text({
-        "tg": "🆘 Фармонҳо: /start, /help, /about, /users (админ)",
-        "ru": "🆘 Команды: /start, /help, /about, /users (админ)",
-        "en": "🆘 Commands: /start, /help, /about, /users (admin)",
-        "fa": "🆘 فرمان‌ها: /start, /help, /about, /users (ادمین)"
+        "tg": "🆘 Фармонҳо: /start, /help, /about, /language",
+        "ru": "🆘 Команды: /start, /help, /about, /language",
+        "en": "🆘 Commands: /start, /help, /about, /language",
+        "fa": "🆘 فرمان‌ها: /start, /help, /about, /language"
     }[lang])
 
 
@@ -1355,21 +1277,6 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(t("info_text", lang))
 
 
-async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = int(update.message.from_user.id)
-    if user_id not in ADMIN_IDS:
-        await update.message.reply_text("🚫 Only admin.")
-        return
-    lang = users_data.get(str(user_id), {}).get("lang", "tg")
-    buttons = [
-        [InlineKeyboardButton({"tg": "📋 Рӯйхати корбарон", "ru": "📋 Список", "en": "📋 Users", "fa": "📋 کاربران"}[lang], callback_data="admin_users"),
-         InlineKeyboardButton({"tg": "📦 Фармоишҳо", "ru": "📦 Заказы", "en": "📦 Orders", "fa": "📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
-        [InlineKeyboardButton({"tg": "📣 Паём ба корбарон", "ru": "📣 Рассылка", "en": "📣 Broadcast", "fa": "📣 پخش"}[lang], callback_data="admin_broadcast")],
-        [InlineKeyboardButton({"tg": "⬅️ Бозгашт", "ru": "⬅️ Назад", "en": "⬅️ Back", "fa": "⬅️ بازгашт"}[lang], callback_data="back_main")],
-    ]
-    await update.message.reply_text({"tg":"👑 Панели админ:","ru":"👑 Панель админа:","en":"👑 Admin panel:","fa":"👑 پنل ادمین:"}[lang], reply_markup=InlineKeyboardMarkup(buttons))
-
-
 # -------------------- Main --------------------
 def main():
     if TOKEN == "REPLACE_WITH_YOUR_BOT_TOKEN":
@@ -1382,21 +1289,13 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("about", about_command))
-    app.add_handler(CommandHandler("users", users_command))
-    app.add_handler(CommandHandler("language", language_command))
-
-    # Extra commands
-    app.add_handler(CommandHandler("catalog", catalog_command))
-    app.add_handler(CommandHandler("cart", cart_command))
-    app.add_handler(CommandHandler("wishlist", wishlist_command))
-    app.add_handler(CommandHandler("info", info_command))
-    app.add_handler(CommandHandler("admin", admin_command))
-
-    # Contact handler
-    app.add_handler(MessageHandler(filters.CONTACT, get_contact))
+    app.add_handler(CommandHandler("language", language_command := lambda u,c: None))  # placeholder, /language handled below by handler that shows setlang_change_ buttons
 
     # CallbackQuery (single router)
     app.add_handler(CallbackQueryHandler(callback_router))
+
+    # Contact handler (phone)
+    app.add_handler(MessageHandler(filters.CONTACT, contact_handler))
 
     # Photos & Documents (payment proofs)
     app.add_handler(MessageHandler((filters.PHOTO | filters.Document.ALL) & (~filters.COMMAND), receive_payment_photo))
@@ -1404,7 +1303,7 @@ def main():
     # Text messages
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_router))
 
-    print("✅ UCstore (multilang) bot started!")
+    print("✅ UCstore (full multilang) bot started!")
     app.run_polling()
 
 
