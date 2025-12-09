@@ -115,11 +115,11 @@ LANG = {
         "registered_ok": "✅ You have successfully registered!!\n🔑 Your code: {code}",
         "notify_admin_new_user": "👤 New user registered!\n\n🧑 Name: {name}\n📱 Phone: {phone}\n🔗 @{username}\n🔑 Code: {code}",
         "main_menu_text": "Main menu:",
-        "catalog": "🛍 Catalog",
-        "wishlist": "❤️ Wishlist",
+        "catalog": "🛍 Shop",
+        "wishlist": "❤️ Favorites",
         "cart": "🛒 Cart",
-        "admin_profile": "💬 Admin profile",
-        "info": "ℹ Info",
+        "admin_profile": "💬 Admin Support",
+        "info": "ℹ Information",
         "free_uc": "🎁 Free UC",
         "admin_panel": "👑 Admin panel",
         "catalog_title": "🛍 Catalog:",
@@ -174,10 +174,10 @@ LANG = {
         "notify_admin_new_user": "👤 Новый пользователь зарегистрировался!\n\n🧑 Имя: {name}\n📱 Телефон: {phone}\n🔗 @{username}\n🔑 Код: {code}",
         "main_menu_text": "Главное меню:",
         "catalog": "🛍 Каталог",
-        "wishlist": "❤️ Желания",
+        "wishlist": "❤️ Избранное",
         "cart": "🛒 Корзина",
-        "admin_profile": "💬 Профиль админа",
-        "info": "ℹ Инфо",
+        "admin_profile": "💬 Связь с админом",
+        "info": "ℹ Информация",
         "free_uc": "🎁 Бесплатные UC",
         "admin_panel": "👑 Панель админа",
         "catalog_title": "🛍 Каталог:",
@@ -231,10 +231,10 @@ LANG = {
         "registered_ok": "✅ با موفقیت ثبت شدید!!\n🔑 کد شما: {code}",
         "notify_admin_new_user": "👤 کاربر جدید ثبت شد!\n\n🧑 نام: {name}\n📱 تلفن: {phone}\n🔗 @{username}\n🔑 کد: {code}",
         "main_menu_text": "منوی اصلی:",
-        "catalog": "🛍 کاتالوگ",
-        "wishlist": "❤️ دلخواه",
+        "catalog": "🛍 فروشگاه",
+        "wishlist": "❤️ مورد علاقه‌ها",
         "cart": "🛒 سبد خرید",
-        "admin_profile": "💬 پروفایل ادمین",
+        "admin_profile": "💬 پشتیبانی ادمین",
         "info": "ℹ اطلاعات",
         "free_uc": "🎁 UC رایگان",
         "admin_panel": "👑 پنل ادمین",
@@ -403,9 +403,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(update.message.chat, user_id)
         return
 
-    # Ask for contact
-    contact_button = KeyboardButton(get_text(DEFAULT_LANG, "ask_contact"), request_contact=True)
-    # Note: show text on button in default language so user understands; after contact we'll set user's language
+    # Ask for contact (button label kept simple)
+    contact_button = KeyboardButton("📱 " + get_text(DEFAULT_LANG, "ask_contact"), request_contact=True)
     reply_markup = ReplyKeyboardMarkup([[contact_button]], resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text(get_text(DEFAULT_LANG, "ask_contact"), reply_markup=reply_markup)
 
@@ -1220,7 +1219,13 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = str(query.from_user.id)
         if code in LANG:
             set_user_language(uid, code)
+            # reply and then show main menu in user's chosen language
             await query.message.reply_text(get_text(uid, "language_changed", lang_name=LANG_NAMES.get(code, code)))
+            # show main menu now that language changed
+            try:
+                await show_main_menu(query.message.chat, uid)
+            except Exception:
+                pass
         else:
             await query.message.reply_text("⚠️")
         return
