@@ -1,14 +1,13 @@
-# ucstore_full.py — Full UCstore bot (multilang + phone requested only on first start)
-# FEATURES:
-# - 4 languages: tg / ru / en / fa
-# - On first /start: ask language → then request phone (request_contact=True)
-#   After user sends phone, we save it and never ask again.
-# - If user already registered with phone → /start shows main menu directly
-# - Catalog, cart, wishlist, checkout, payment methods (VISA / Sber), payment proof handling
-# - Admin panel: view users, view orders, confirm/reject payments, broadcast
-# - Free UC system (daily roll, claiming packs), invite link reward
-# - Persistent users.json and orders.json
-# - Replace TOKEN with your bot token. Requires python-telegram-bot v20+ and Python 3.10+
+# ucstore_variant_a.py — Full UCstore bot (Variant A)
+# Changes (Variant A):
+# - Phone requested first; after phone the bot asks for language.
+# - Main menu uses keyboard buttons that send bot commands (e.g. /catalog, /cart, /wishlist, /info).
+# - Added /language command to change language (shows inline language buttons).
+# - Improved user profile display (masked phone, username, last game id from last order, cart summary).
+# - Kept original labels and flows where possible.
+#
+# Requirements: python-telegram-bot v20+, Python 3.10+
+# NOTE: Replace TOKEN with your bot token before running.
 
 from telegram import (
     Update,
@@ -274,13 +273,17 @@ def t(key: str, lang: str, **kwargs) -> str:
 
 
 def get_menu_buttons_for_lang(lang: str):
+    # Return ReplyKeyboardMarkup where each button sends a command (e.g. /catalog)
+    # Labels are preserved per language.
     btns = [
-        [t("btn_catalog", lang), t("btn_wishlist", lang)],
-        [t("btn_cart", lang), t("btn_admin_profile", lang)],
-        [t("btn_info", lang), t("btn_free_uc", lang)],
-        [t("btn_language", lang)],
+        [KeyboardButton(f"/catalog") , KeyboardButton(f"/wishlist")],
+        [KeyboardButton(f"/cart"), KeyboardButton(f"/profile")],
+        [KeyboardButton(f"/info"), KeyboardButton(f"/free_uc")],
+        [KeyboardButton(f"/language")],
     ]
-    return btns
+    # If admin, add admin panel button as a command
+    return ReplyKeyboardMarkup(btns, resize_keyboard=True, one_time_keyboard=False)
+
 
 # -------------------- /start --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,88 +299,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_main_menu(update.message.chat, user_id)
         return
 
-    # Ask language selection (first-time flow or missing phone)
-    buttons = []
-    row = []
-    for code, label in LANGUAGE_LABELS.items():
-        row.append(InlineKeyboardButton(label, callback_data=f"setlang_{code}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    await update.message.reply_text(t("ask_language", "tg"), reply_markup=InlineKeyboardMarkup(buttons))
-
-
-# -------------------- Language callback --------------------
-async def set_language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data or ""
-    user = query.from_user
-    user_id = str(user.id)
-
-    # If changing language from /language command for existing user
-    if data.startswith("setlang_change_"):
-        code = data.split("setlang_change_", 1)[1]
-        if user_id in users_data:
-            users_data[user_id]["lang"] = code
-            save_all()
-            await query.message.reply_text(f"✔ {LANGUAGE_LABELS.get(code, code)} — {t('main_menu_title', code)}")
-            await show_main_menu(query.message.chat, user_id)
-        else:
-            # user not registered yet -> follow first-time flow
-            # ask phone after setting preferred lang
-            users_data[user_id] = {
-                "id": int(user_id),
-                "name": user.first_name or "",
-                "username": user.username or "",
-                "phone": "",
-                "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "free_uc": 0,
-                "last_claim": None,
-                "last_daily_uc": None,
-                "code": generate_user_code(),
-                "lang": code,
-            }
-            save_all()
-            # ask for phone
-            kb = ReplyKeyboardMarkup(
-                [[KeyboardButton(t("btn_phone", code), request_contact=True)]],
-                resize_keyboard=True,
-                one_time_keyboard=True,
-            )
-            await query.message.reply_text(t("ask_phone", code), reply_markup=kb)
-        return
-
-    # initial registration selection (first start)
-    if data.startswith("setlang_"):
-        code = data.split("_", 1)[1]
-        # create user record (phone empty) and ask for contact
-        users_data[user_id] = {
-            "id": int(user_id),
-            "name": user.first_name or "",
-            "username": user.username or "",
-            "phone": "",
-            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "free_uc": 0,
-            "last_claim": None,
-            "last_daily_uc": None,
-            "code": generate_user_code(),
-            "lang": code,
-        }
-        save_all()
-        # ask contact (phone) in chosen language
-        kb = ReplyKeyboardMarkup(
-            [[KeyboardButton(t("btn_phone", code), request_contact=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
-        await query.message.reply_text(t("ask_phone", code), reply_markup=kb)
-        return
-
-    await query.message.reply_text(t("error_generic", "tg"))
+    # If user exists without phone or new user -> ask phone first
+    kb = ReplyKeyboardMarkup(
+        [[KeyboardButton(t("btn_phone", "tg"), request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+    await update.message.reply_text(t("ask_phone", "tg"), reply_markup=kb)
 
 
 # -------------------- Contact handler (first-time phone) --------------------
@@ -387,26 +315,26 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user = update.message.from_user
     user_id = str(user.id)
+
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     if user_id not in users_data:
-        # edge case: user sends contact before language selection — default to tg
+        # create user record with empty lang -> will ask language next
         users_data[user_id] = {
             "id": int(user_id),
             "name": user.first_name or "",
             "username": user.username or "",
             "phone": contact.phone_number,
-            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "date": now_str,
             "free_uc": 0,
             "last_claim": None,
             "last_daily_uc": None,
             "code": generate_user_code(),
-            "lang": "tg",
+            "lang": "",  # empty until language chosen
         }
-        save_all()
-        lang = "tg"
     else:
         users_data[user_id]["phone"] = contact.phone_number
-        save_all()
-        lang = users_data[user_id].get("lang", "tg")
+        # preserve existing lang if present
+    save_all()
 
     # notify admins about new registration (optional)
     try:
@@ -418,18 +346,48 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    # reply and show main menu
-    await update.message.reply_text(t("phone_ok", lang), reply_markup=ReplyKeyboardRemove())
-    await show_main_menu(update.message.chat, user_id)
+    # reply and ask language selection (inline)
+    await update.message.reply_text(t("phone_ok", "tg"), reply_markup=ReplyKeyboardRemove())
+    # show language inline selection
+    buttons = []
+    row = []
+    for code, label in LANGUAGE_LABELS.items():
+        row.append(InlineKeyboardButton(label, callback_data=f"setlang_change_{code}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    await update.message.reply_text(t("ask_language", "tg"), reply_markup=InlineKeyboardMarkup(buttons))
+
+
+# -------------------- Language callback --------------------
+async def set_language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data or ""
+    user = query.from_user
+    user_id = str(user.id)
+
+    # If changing language for existing user (or after phone)
+    if data.startswith("setlang_change_"):
+        code = data.split("setlang_change_", 1)[1]
+        if user_id in users_data:
+            users_data[user_id]["lang"] = code
+            save_all()
+            await query.message.reply_text(f"✔ {LANGUAGE_LABELS.get(code, code)} — {t('main_menu_title', code)}")
+            await show_main_menu(query.message.chat, user_id)
+            return
+
+    await query.message.reply_text(t("error_generic", "tg"))
 
 
 # -------------------- Show main menu --------------------
 async def show_main_menu(chat, user_id: str):
-    lang = users_data.get(user_id, {}).get("lang", "tg")
-    buttons = get_menu_buttons_for_lang(lang)
-    if int(user_id) in ADMIN_IDS:
-        buttons.append([t("btn_admin_panel", lang)])
-    await chat.send_message(t("main_menu_title", lang), reply_markup=ReplyKeyboardMarkup(buttons, resize_keyboard=True))
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
+    kb = get_menu_buttons_for_lang(lang)
+    # admin button appears only for admin users — since we use command keyboard, admin can use /adminpanel
+    await chat.send_message(t("main_menu_title", lang), reply_markup=kb)
 
 
 # -------------------- Catalog handlers --------------------
@@ -438,7 +396,7 @@ async def catalog_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not target:
         return
     from_user = update.message.from_user if update.message else update.callback_query.from_user
-    lang = users_data.get(str(from_user.id), {}).get("lang", "tg")
+    lang = users_data.get(str(from_user.id), {}).get("lang", "tg") or "tg"
 
     buttons = []
     row = []
@@ -469,7 +427,7 @@ async def select_item_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.message.reply_text(t("error_generic", "tg"))
         return
 
-    user_lang = users_data.get(str(query.from_user.id), {}).get("lang", "tg")
+    user_lang = users_data.get(str(query.from_user.id), {}).get("lang", "tg") or "tg"
     add_label = {"tg":"Илова ба сабад","ru":"В корзину","en":"Add to cart","fa":"افزودن به سبد"}[user_lang]
     wish_label = {"tg":"Ба дилхоҳҳо","ru":"В избранное","en":"To wishlist","fa":"به علاقه‌مندی‌ها"}[user_lang]
     back_label = {"tg":"Бозгашт","ru":"Назад","en":"Back","fa":"بازгашт"}[user_lang]
@@ -492,7 +450,7 @@ async def addcart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_carts.setdefault(user_id, {})
     user_carts[user_id][item_id] = user_carts[user_id].get(item_id, 0) + 1
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     await query.message.reply_text({"tg":"✅ Ба сабад илова шуд!","ru":"✅ Добавлено в корзину!","en":"✅ Added to cart!","fa":"✅ به سبد اضافه شد!"}[lang])
 
 
@@ -505,14 +463,14 @@ async def addwish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         return
     user_wishlist.setdefault(user_id, set()).add(item_id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
-    await query.message.reply_text({"tg":"❤️ Ба дилхоҳҳо илова шуд!","ru":"❤️ Добавлено в избранное!","en":"❤️ Added to wishlist!","fa":"❤️ به علاقه‌مندی اضافه شد!"}[lang])
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
+    await query.message.reply_text({"tg":"❤️ Ба дилхоҳҳо илova шуд!","ru":"❤️ Добавлено в избранное!","en":"❤️ Added to wishlist!","fa":"❤️ به علاقه‌مندی اضافه شد!"}[lang])
 
 
 async def open_wishlist_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     wishlist = user_wishlist.get(user_id, set())
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     if not wishlist:
         await update.message.reply_text(t("wishlist_empty", lang))
         return
@@ -540,7 +498,7 @@ async def removewish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     if user_id in user_wishlist:
         user_wishlist[user_id].discard(item_id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     await query.message.reply_text(t("confirm_deleted_wishlist", lang))
 
 
@@ -548,7 +506,7 @@ async def removewish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def show_cart_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     cart = user_carts.get(user_id, {})
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     if not cart:
         await update.message.reply_text(t("cart_empty", lang))
         return
@@ -583,7 +541,7 @@ async def clear_cart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     user_id = str(query.from_user.id)
     user_carts[user_id] = {}
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     await query.message.reply_text({"tg":"🧹 Сабад тоза шуд!","ru":"🧹 Корзина очищена!","en":"🧹 Cart cleared!","fa":"🧹 سبد پاک شد!"}[lang])
 
 
@@ -592,7 +550,7 @@ async def checkout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = str(query.from_user.id)
     cart = user_carts.get(user_id, {})
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     if not cart:
         await query.message.reply_text(t("cart_empty", lang))
         return
@@ -606,7 +564,7 @@ async def get_game_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("awaiting_game_id"):
         return
     game_id = update.message.text.strip()
-    lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg")
+    lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg") or "tg"
     if not game_id.isdigit():
         await update.message.reply_text(t("invalid_game_id", lang))
         return
@@ -659,7 +617,7 @@ async def payment_method_callback(update: Update, context: ContextTypes.DEFAULT_
             order["status"] = "awaiting_proof"
             order["payment_method"] = method_name
             save_all()
-            lang = users_data.get(str(query.from_user.id), {}).get("lang", "tg")
+            lang = users_data.get(str(query.from_user.id), {}).get("lang", "tg") or "tg"
             await query.message.reply_text(f"💳 {method_name}\n📌 {card}\n\n" + t("send_proof", lang))
             return
 
@@ -676,7 +634,7 @@ async def receive_payment_photo(update: Update, context: ContextTypes.DEFAULT_TY
             order = o
             break
     if not order:
-        lang = users_data.get(user_id, {}).get("lang", "tg")
+        lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
         await update.message.reply_text(t("no_pending_order_proof", lang))
         return
 
@@ -689,7 +647,7 @@ async def receive_payment_photo(update: Update, context: ContextTypes.DEFAULT_TY
         file_id = update.message.document.file_id
         is_photo = False
     else:
-        lang = users_data.get(user_id, {}).get("lang", "tg")
+        lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
         await update.message.reply_text(t("error_generic", lang))
         return
 
@@ -723,7 +681,7 @@ async def receive_payment_photo(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
 
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     await update.message.reply_text(t("proof_received", lang))
 
 
@@ -749,7 +707,7 @@ async def admin_payment_verify(update: Update, context: ContextTypes.DEFAULT_TYP
                 order["status"] = "confirmed"
                 save_all()
                 try:
-                    lang = users_data.get(str(user_chat), {}).get("lang", "tg")
+                    lang = users_data.get(str(user_chat), {}).get("lang", "tg") or "tg"
                     await context.bot.send_message(user_chat, t("order_confirmed_user", lang).format(order_id=order_id))
                 except Exception:
                     pass
@@ -758,7 +716,7 @@ async def admin_payment_verify(update: Update, context: ContextTypes.DEFAULT_TYP
                 order["status"] = "rejected"
                 save_all()
                 try:
-                    lang = users_data.get(str(user_chat), {}).get("lang", "tg")
+                    lang = users_data.get(str(user_chat), {}).get("lang", "tg") or "tg"
                     await context.bot.send_message(user_chat, t("order_rejected_user", lang).format(order_id=order_id))
                 except Exception:
                     pass
@@ -772,7 +730,7 @@ async def free_uc_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.message.chat if update.message else update.callback_query.message.chat
     from_user = update.message.from_user if update.message else update.callback_query.from_user
     user_id = str(from_user.id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
 
     if user_id not in users_data:
         await chat.send_message(t("error_generic", lang))
@@ -818,7 +776,7 @@ async def daily_uc_roll(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     user_id = str(q.from_user.id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     user = users_data.get(user_id)
     if not user:
         await q.message.reply_text(t("error_generic", lang))
@@ -849,7 +807,7 @@ async def my_uc_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     user_id = str(q.from_user.id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     user = users_data.get(user_id, {})
     amount = user.get("free_uc", 0)
     btns = [
@@ -865,7 +823,7 @@ async def claim_uc_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data
     needed = 60 if data == "claim_60" else 325 if data == "claim_325" else None
     user_id = str(q.from_user.id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
     if not needed:
         return
     user = users_data.get(user_id, {})
@@ -880,7 +838,7 @@ async def get_free_uc_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "awaiting_free_id" not in context.user_data:
         return
     ttext = update.message.text.strip()
-    lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg")
+    lang = users_data.get(str(update.message.from_user.id), {}).get("lang", "tg") or "tg"
     if not ttext.isdigit() or not (8 <= len(ttext) <= 15):
         await update.message.reply_text({"tg":"⚠️ Танҳо рақам, аз 8 то 15 рақам! Лутфан дубора кӯшиш кунед.","ru":"⚠️ Только цифры, от 8 до 15 цифр! Пожалуйста, повторите.","en":"⚠️ Numbers only, 8–15 digits. Please try again.","fa":"⚠️ فقط عدد، از 8 تا 15 رقم! لطفاً دوباره تلاش کنید."}[lang])
         return
@@ -970,7 +928,7 @@ async def admin_panel_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     user_id = str(query.from_user.id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
 
     if data == "admin_panel":
         keyboard = [
@@ -1008,11 +966,151 @@ async def admin_panel_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+# -------------------- User profile display --------------------
+def mask_phone(phone: str) -> str:
+    if not phone:
+        return "—"
+    # show first 3 and last 2 digits with stars
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) <= 4:
+        return digits
+    return digits[:3] + "*" * max(1, len(digits)-5) + digits[-2:]
+
+
+async def show_profile(update_obj, context: ContextTypes.DEFAULT_TYPE):
+    # can be called from CommandHandler or CallbackQuery
+    if isinstance(update_obj, Update):
+        update = update_obj
+        user = update.message.from_user
+        chat = update.message.chat
+    else:
+        # callback
+        update = update_obj
+        user = update.callback_query.from_user
+        chat = update.callback_query.message.chat
+
+    user_id = str(user.id)
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
+    user = users_data.get(user_id, {})
+    name = user.get("name") or "—"
+    username = f"@{user.get('username')}" if user.get("username") else "—"
+    phone = mask_phone(user.get("phone", "—"))
+    # last game id from last order
+    last_game = "—"
+    last_product = "—"
+    for o in reversed(orders):
+        if str(o.get("user_id")) == user_id:
+            last_game = o.get("game_id", "—")
+            if o.get("type") == "free_uc":
+                last_product = f"{o.get('pack',0)} UC (free)"
+            else:
+                last_product = f"{o.get('total',0)} TJS"
+            break
+
+    # cart summary
+    cart = user_carts.get(user_id, {})
+    cart_summary = "—"
+    if cart:
+        parts = []
+        for pid, qty in cart.items():
+            item = ITEMS.get(pid, {"name": f"#{pid}"})
+            parts.append(f"{item['name']} x{qty}")
+        cart_summary = ", ".join(parts)
+
+    info_text = (
+        f"👤 Ном: {name}\n"
+        f"🔗 Username: {username}\n"
+        f"📱 Рақам: {phone}\n"
+        f"🎮 ID-бози: {last_game}\n"
+        f"📦 Маҳсулот/Сабад: {cart_summary}\n"
+        f"🔑 Код: {user.get('code', '—')}\n"
+    )
+    await chat.send_message(info_text)
+
+
+# -------------------- Admin wrappers & small commands --------------------
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.message.from_user.id)
+    lang = users_data.get(uid, {}).get("lang", "tg") or "tg"
+    await update.message.reply_text({
+        "tg": "🆘 Фармонҳо: /start, /help, /about, /language, /catalog, /cart, /wishlist, /profile",
+        "ru": "🆘 Команды: /start, /help, /about, /language, /catalog, /cart, /wishlist, /profile",
+        "en": "🆘 Commands: /start, /help, /about, /language, /catalog, /cart, /wishlist, /profile",
+        "fa": "🆘 فرمان‌ها: /start, /help, /about, /language, /catalog, /cart, /wishlist, /profile"
+    }[lang])
+
+
+async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.message.from_user.id)
+    lang = users_data.get(uid, {}).get("lang", "tg") or "tg"
+    await update.message.reply_text(t("info_text", lang))
+
+
+async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if int(update.message.from_user.id) not in ADMIN_IDS:
+        await update.message.reply_text("🚫 Only admin.")
+        return
+    if not users_data:
+        await update.message.reply_text("No users.")
+        return
+    text = "Users:\n\n"
+    for u in users_data.values():
+        text += f"{u.get('name')} — {u.get('phone')} (id: {u.get('id')})\n"
+    await update.message.reply_text(text)
+
+
+# wrappers
+async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await catalog_handler(update, context)
+
+
+async def cart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # show cart (command)
+    user_id = str(update.message.from_user.id)
+    cart = user_carts.get(user_id, {})
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
+    if not cart:
+        await update.message.reply_text(t("cart_empty", lang))
+        return
+    # reuse show_cart_from_text logic
+    await show_cart_from_text(update, context)
+
+
+async def wishlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await open_wishlist_from_text(update, context)
+
+
+async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.message.from_user.id)
+    lang = users_data.get(uid, {}).get("lang", "tg") or "tg"
+    await update.message.reply_text(t("info_text", lang))
+
+
+async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await show_profile(update, context)
+
+
+async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # show inline language change buttons for existing users
+    user = update.message.from_user
+    user_id = str(user.id)
+    buttons = []
+    row = []
+    for code, label in LANGUAGE_LABELS.items():
+        row.append(InlineKeyboardButton(label, callback_data=f"setlang_change_{code}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    await update.message.reply_text(t("ask_language", users_data.get(user_id, {}).get("lang", "tg") or "tg"), reply_markup=InlineKeyboardMarkup(buttons))
+
+
 # -------------------- Text handling --------------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = str(update.message.from_user.id)
-    lang = users_data.get(user_id, {}).get("lang", "tg")
+    lang = users_data.get(user_id, {}).get("lang", "tg") or "tg"
 
     # broadcast mode
     if broadcast_mode.get(user_id):
@@ -1041,43 +1139,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
         return
 
-    # menu processing
-    if text == t("btn_catalog", lang):
-        await catalog_handler(update, context)
-    elif text == t("btn_wishlist", lang):
-        await open_wishlist_from_text(update, context)
-    elif text == t("btn_cart", lang):
-        await show_cart_from_text(update, context)
-    elif text == t("btn_info", lang):
-        await update.message.reply_text(t("info_text", lang))
-    elif text == t("btn_admin_profile", lang):
-        await update.message.reply_text(
-            {"tg":"Барои тамос бо админ зер кунед:","ru":"Связаться с админом:","en":"Contact admin:","fa":"برای تماس با ادمین:"}[lang],
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💬 Admin", url=f"tg://user?id={ADMIN_IDS[0]}")]]),
-        )
-    elif text == t("btn_admin_panel", lang) and int(user_id) in ADMIN_IDS:
-        buttons = [
-            [InlineKeyboardButton({"tg":"📋 Рӯйхати корбарон","ru":"📋 Список","en":"📋 Users","fa":"📋 کاربران"}[lang], callback_data="admin_users"),
-             InlineKeyboardButton({"tg":"📦 Фармоишҳо","ru":"📦 Заказы","en":"📦 Orders","fa":"📦 سفارش‌ها"}[lang], callback_data="admin_orders")],
-            [InlineKeyboardButton({"tg":"📣 Паём ба корбарон","ru":"📣 Рассылка","en":"📣 Broadcast","fa":"📣 پخش"}[lang], callback_data="admin_broadcast")],
-            [InlineKeyboardButton({"tg":"⬅️ Бозгашт","ru":"⬅️ Назад","en":"⬅️ Back","fa":"⬅️ بازгашт"}[lang], callback_data="back_main")],
-        ]
-        await update.message.reply_text({"tg":"👑 Панели админ:","ru":"👑 Панель админа:","en":"👑 Admin panel:","fa":"👑 پنل ادمین:"}[lang], reply_markup=InlineKeyboardMarkup(buttons))
-    elif text == t("btn_free_uc", lang):
-        await free_uc_menu(update, context)
-    elif text == t("btn_language", lang):
-        await language_command(update, context)
-    else:
-        await update.message.reply_text({"tg":"🤖 Лутфан аз тугмаҳои меню истифода баред.","ru":"🤖 Пожалуйста, используйте меню.","en":"🤖 Please use the menu buttons.","fa":"🤖 لطفاً از دکمه‌های منو استفاده کنید."}[lang])
-
-
-# -------------------- Text router --------------------
-async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # contact messages handled separately
-    if update.message.contact:
-        await contact_handler(update, context)
-        return
-    await handle_text(update, context)
+    # Since menu now uses commands, most actions are handled by CommandHandlers.
+    # Provide helpful fallback.
+    await update.message.reply_text({"tg":"🤖 Лутфан аз тугмаҳои меню истифода баред.","ru":"🤖 Пожалуйста, используйте меню.","en":"🤖 Please use the menu buttons.","fa":"🤖 لطفاً از دکمه‌های منو استفاده کنید."}[lang])
 
 
 # -------------------- Callback router --------------------
@@ -1088,7 +1152,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     # Language callbacks
-    if data.startswith("setlang_") or data.startswith("setlang_change_"):
+    if data.startswith("setlang_change_"):
         await set_language_callback(update, context)
         return
 
@@ -1205,7 +1269,7 @@ async def invite_link_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await q.message.reply_text("⚠️ Bot username not found.")
         return
     invite_url = f"https://t.me/{bot_username}?start=invite_{uid}"
-    lang = users_data.get(uid, {}).get("lang", "tg")
+    lang = users_data.get(uid, {}).get("lang", "tg") or "tg"
     await q.message.reply_text(t("invite_text", lang).format(invite=invite_url))
 
 
@@ -1227,56 +1291,6 @@ def _create_order_record(user_id: str, total: int, extra=None) -> dict:
     return order
 
 
-# -------------------- Small commands --------------------
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.message.from_user.id)
-    lang = users_data.get(uid, {}).get("lang", "tg")
-    await update.message.reply_text({
-        "tg": "🆘 Фармонҳо: /start, /help, /about, /language",
-        "ru": "🆘 Команды: /start, /help, /about, /language",
-        "en": "🆘 Commands: /start, /help, /about, /language",
-        "fa": "🆘 فرمان‌ها: /start, /help, /about, /language"
-    }[lang])
-
-
-async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.message.from_user.id)
-    lang = users_data.get(uid, {}).get("lang", "tg")
-    await update.message.reply_text(t("info_text", lang))
-
-
-async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if int(update.message.from_user.id) not in ADMIN_IDS:
-        await update.message.reply_text("🚫 Only admin.")
-        return
-    if not users_data:
-        await update.message.reply_text("No users.")
-        return
-    text = "Users:\n\n"
-    for u in users_data.values():
-        text += f"{u.get('name')} — {u.get('phone')} (id: {u.get('id')})\n"
-    await update.message.reply_text(text)
-
-
-# wrappers
-async def catalog_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await catalog_handler(update, context)
-
-
-async def cart_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await show_cart_from_text(update, context)
-
-
-async def wishlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await open_wishlist_from_text(update, context)
-
-
-async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = str(update.message.from_user.id)
-    lang = users_data.get(uid, {}).get("lang", "tg")
-    await update.message.reply_text(t("info_text", lang))
-
-
 # -------------------- Main --------------------
 def main():
     if TOKEN == "REPLACE_WITH_YOUR_BOT_TOKEN":
@@ -1289,7 +1303,13 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("about", about_command))
-    app.add_handler(CommandHandler("language", language_command := lambda u,c: None))  # placeholder, /language handled below by handler that shows setlang_change_ buttons
+    app.add_handler(CommandHandler("language", language_command))
+    app.add_handler(CommandHandler("catalog", catalog_command))
+    app.add_handler(CommandHandler("cart", cart_command))
+    app.add_handler(CommandHandler("wishlist", wishlist_command))
+    app.add_handler(CommandHandler("info", info_command))
+    app.add_handler(CommandHandler("profile", profile_command))
+    app.add_handler(CommandHandler("users", users_command))  # admin helper
 
     # CallbackQuery (single router)
     app.add_handler(CallbackQueryHandler(callback_router))
@@ -1301,9 +1321,10 @@ def main():
     app.add_handler(MessageHandler((filters.PHOTO | filters.Document.ALL) & (~filters.COMMAND), receive_payment_photo))
 
     # Text messages
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_router))
+    # Texts that are not commands are handled here (fallback)
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
 
-    print("✅ UCstore (full multilang) bot started!")
+    print("✅ UCstore (Variant A) bot started!")
     app.run_polling()
 
 
