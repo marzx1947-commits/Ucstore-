@@ -26,7 +26,7 @@ ADMIN_IDS = [8436218638]
 ADMIN_TELEGRAM = "https://t.me/MARZBON_TJ"
 ADMIN_INSTAGRAM = "https://www.instagram.com/marzbontj?igsh=MW9yaG9lcm93YjRueA=="
 
-FREE_UC_CHANNEL = "@marzbon_media"  # must be public channel or bot can’t check membership
+FREE_UC_CHANNEL = "@marzbon_media"  # бояд канали public бошад
 VISA_NUMBER = "4439200020432471"
 SBER_NUMBER = "2202208496090011"
 
@@ -46,15 +46,36 @@ VOUCHERS = {
 }
 
 ADMIN_INFO = (
-    "UCstore — боти фурӯши UC барои PUBG Mobile.\n\n"
-    "🎁 UC ройгон: ҳар рӯз 1–5 UC + барои ҳар даъват 2 UC\n"
-    "🛍 Каталог: UC + ваучерҳо\n"
-    "💳 Пардохт: VISA / SberBank (квитанция → админ)\n"
-    "💬 Админ: @MARZBON_TJ"
+    """UCstore — ин боти расмии фурӯши UC барои PUBG Mobile ва дигар хидматҳои рақамии бозӣ мебошад. Мо барои бозингарони тоҷик платформаи боэътимод, босифат ва осонро фароҳам овардаем, то харид кардан осон, бехатар ва зуд сурат гирад. ⚡️
+
+🔹 Афзалиятҳои UCstore:
+
+🎁 UC-и ройгон 
+
+🫴Мо ба шумо ҳаруз аз 1 то 5 uc-и ройгон медиҳем ва инчунин бо даъвати ҳар як дуст шумо 2 uc ба даст меоред.
+
+• 🛍 Каталоги пурра бо нархҳои дастрас
+• 💳 Усулҳои гуногуни пардохт (аз ҷумла роҳи нави корти милли ва  VISA)
+• ⚙️ Системаи автоматии фармоиш ва тасдиқ
+• 💬 Пуштибонии зуд аз ҷониби админ
+• ❤️ Имкони илова ба “дилхоҳҳо” ва сабади шахсӣ
+• 🔔 Огоҳии фаврӣ дар бораи ҳолати фармоиш
+
+📦 Чӣ тавр кор мекунад:
+1️⃣ Ба бот ворид шавед
+2️⃣ Маҳсулоти дилхоҳатонро интихоб кунед
+3️⃣ Фармоиш диҳед ва пардохтро анҷом диҳед
+4️⃣ Мунтазир шавед — UC ба ҳисоби шумо фиристода мешавад 🎁
+
+🤝 Бартарии мо — шаффофият, суръат ва эътимод.
+Ҳар як фармоиш боэҳтиёт санҷида мешавад, то мизоҷон таҷрибаи беҳтарин гиранд.
+
+Бо UCstore шумо ҳамеша бехатар, зуд ва бо эътимод харид мекунед 💪
+
+Инчунин дар бораи тамоми мушкилот шумо ҳамеша метавонед ба админ тамос гиред @MARZBON_TJ"""
 )
 
 # ===================== DATA (RAM ONLY) =====================
-# NOTE: In botifyhost, filesystem is restricted. So we store in RAM.
 users_data = {}         # user_id(str) -> dict
 orders = []             # list of dict orders
 user_carts = {}         # user_id(str) -> {item_id(int): qty(int)}
@@ -94,10 +115,10 @@ def create_order(user_id: str, total: int, items: dict, game_id: str) -> dict:
         "user_name": u.get("name", ""),
         "username": u.get("username", ""),
         "phone": u.get("phone", ""),
-        "items": items,            # {item_id: qty}
+        "items": items,
         "game_id": game_id,
         "total": total,
-        "status": "choose_payment",  # choose_payment -> awaiting_proof -> proof_sent -> confirmed/rejected
+        "status": "choose_payment",
         "payment_method": None,
         "proof_file": None,
         "time": now_str(),
@@ -122,9 +143,23 @@ async def show_main_menu(chat, user_id: str):
         kb.append(["👑 Панели админ"])
     await chat.send_message("Менюи асосӣ:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
 
-# ===================== MATH CHALLENGE =====================
+# ===================== MATH CHALLENGE (UPDATED) =====================
 async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Simple math captcha for new users
+    # 1. Check if user is blocked
+    blocked_until = context.user_data.get("math_blocked_until")
+    if blocked_until:
+        if dt.datetime.now() < blocked_until:
+            diff = blocked_until - dt.datetime.now()
+            minutes_left = int(diff.total_seconds() // 60) + 1
+            await update.effective_chat.send_message(
+                f"🚫 Шумо блок шудед! Лутфан пас аз {minutes_left} дақиқа дубора кӯшиш кунед."
+            )
+            return
+        else:
+            # Time is up, remove block
+            context.user_data["math_blocked_until"] = None
+
+    # 2. Generate new math problem
     op = random.choice(["+", "-"])
     if op == "+":
         a, b = random.randint(1, 50), random.randint(1, 50)
@@ -145,37 +180,47 @@ async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    # returns True if consumed
+    # Returns True if the message was consumed by math logic
     if not context.user_data.get("awaiting_math"):
+        # If user is blocked but tries to type something
+        blocked_until = context.user_data.get("math_blocked_until")
+        if blocked_until and dt.datetime.now() < blocked_until:
+             diff = blocked_until - dt.datetime.now()
+             minutes_left = int(diff.total_seconds() // 60) + 1
+             await update.message.reply_text(f"⏳ Шумо блок ҳастед. {minutes_left} дақиқаи дигар сабр кунед.")
+             return True
         return False
+
     txt = (update.message.text or "").strip()
     try:
         val = int(txt)
     except:
-        context.user_data["math_try"] += 1
-        left = 3 - context.user_data["math_try"]
-        if left > 0:
-            await update.message.reply_text(f"⚠️ Рақам нависед. {left} кӯшиш монд.")
-        else:
-            context.user_data["awaiting_math"] = False
-            await update.message.reply_text("❌ Кӯшишҳо тамом шуд. Меню:")
-            await show_main_menu(update.effective_chat, str(update.effective_user.id))
-        return True
+        val = None # invalid input counts as wrong
 
-    if val == context.user_data.get("math_ans"):
+    # Correct answer
+    if val is not None and val == context.user_data.get("math_ans"):
         context.user_data["awaiting_math"] = False
+        context.user_data["math_blocked_until"] = None
         await update.message.reply_text("✅ Офарин! Санҷиш гузашт.")
         await show_main_menu(update.effective_chat, str(update.effective_user.id))
         return True
 
+    # Wrong answer
     context.user_data["math_try"] += 1
     left = 3 - context.user_data["math_try"]
+
     if left > 0:
         await update.message.reply_text(f"❌ Нодуруст. {left} кӯшиш монд.")
     else:
+        # FAILED 3 TIMES -> BLOCK FOR 10 MINUTES
         context.user_data["awaiting_math"] = False
-        await update.message.reply_text("❌ Кӯшишҳо тамом шуд. Меню:")
-        await show_main_menu(update.effective_chat, str(update.effective_user.id))
+        context.user_data["math_blocked_until"] = dt.datetime.now() + dt.timedelta(minutes=10)
+        
+        await update.message.reply_text(
+            "🚫 Шумо 3 маротиба хато кардед!\n\n"
+            "⚠️ Барои бехатарӣ, дастрасӣ ба бот барои 10 дақиқа маҳдуд шуд.\n"
+            "Лутфан пас аз 10 дақиқа баргардед ва /start кунед."
+        )
     return True
 
 # ===================== START / REGISTER =====================
@@ -191,8 +236,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["invited_by"] = inviter
 
     if uid in users_data:
-        await update.message.reply_text(f"👋 Салом, {user.first_name}!")
-        await show_main_menu(update.effective_chat, uid)
+        # If user exists, force math check (unless they just passed it)
+        # Note: In this logic, every /start triggers math.
+        await start_math(update, context)
         return
 
     btn = KeyboardButton("📱 Ворид шудан бо рақам", request_contact=True)
@@ -216,12 +262,12 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "username": u.username or "",
             "phone": phone,
             "date": now_str(),
-            "free_uc": 10,  # signup bonus
+            "free_uc": 10,
             "last_daily_uc": None,
             "code": code,
         }
 
-        # inviter bonus +2 UC
+        # inviter bonus
         inviter = context.user_data.get("invited_by")
         if inviter and inviter in users_data and inviter != uid:
             users_data[inviter]["free_uc"] = users_data[inviter].get("free_uc", 0) + 2
@@ -235,11 +281,7 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     admin,
-                    "👤 Корбари нав сабт шуд!\n\n"
-                    f"🧑 Ном: {u.first_name}\n"
-                    f"📱 Рақам: {phone}\n"
-                    f"🔗 @{u.username or '—'}\n"
-                    f"🔑 Код: {code}"
+                    f"👤 Корбари нав!\n{u.first_name} | {phone}\n@{u.username}"
                 )
             except:
                 pass
@@ -249,7 +291,7 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove(),
     )
 
-    # start math challenge for new registered session
+    # Start math challenge
     await start_math(update, context)
 
 # ===================== CATALOG =====================
@@ -397,7 +439,7 @@ async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📦 Фармоиш", callback_data="checkout"),
          InlineKeyboardButton("🗑️ Пок", callback_data="clear_cart")],
-        [InlineKeyboardButton("⬅️ Бозгашт", callback_status := "back_main") if False else InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")]
+        [InlineKeyboardButton("⬅️ Бозгашт", callback_data="back_main")]
     ])
     await update.message.reply_text(txt, reply_markup=kb)
 
@@ -411,9 +453,8 @@ async def checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.message.reply_text("🛒 Сабад холист.")
         return
 
-    # store pending checkout in context
     context.user_data["awaiting_game_id"] = True
-    context.user_data["pending_items"] = dict(cart)  # copy
+    context.user_data["pending_items"] = dict(cart)
     await q.message.reply_text("🎮 ID-и бозиро ворид кунед (8–15 рақам):")
 
 async def handle_game_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -437,7 +478,6 @@ async def handle_game_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     order = create_order(uid, total, items, game_id)
 
-    # clear cart + pending
     user_carts[uid] = {}
     context.user_data["awaiting_game_id"] = False
     context.user_data.pop("pending_items", None)
@@ -458,7 +498,7 @@ async def choose_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     parts = q.data.split("_")
-    method = parts[1]  # visa / sber
+    method = parts[1]
     order_id = int(parts[2])
 
     order = find_order(order_id)
@@ -474,7 +514,6 @@ async def choose_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order["payment_method"] = "VISA" if method == "visa" else "SberBank"
     card = VISA_NUMBER if method == "visa" else SBER_NUMBER
 
-    # mark user awaiting proof
     context.user_data["awaiting_proof_order"] = order_id
 
     await q.message.reply_text(
@@ -484,11 +523,10 @@ async def choose_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Receives payment proof only if user is currently awaiting proof."""
     uid = str(update.effective_user.id)
     order_id = context.user_data.get("awaiting_proof_order")
     if not order_id:
-        return  # not proof context (maybe broadcast photo step)
+        return
     order = find_order(int(order_id))
     if not order or order.get("status") != "awaiting_proof":
         return
@@ -506,11 +544,8 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     order["proof_file"] = file_id
     order["status"] = "proof_sent"
-
-    # stop awaiting
     context.user_data.pop("awaiting_proof_order", None)
 
-    # compose caption for admin
     items_txt = ""
     for item_id, qty in (order.get("items") or {}).items():
         item_id = int(item_id)
@@ -548,13 +583,12 @@ async def receive_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_pay_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-
     if not is_admin(q.from_user.id):
         await q.message.reply_text("🚫 Танҳо админ!")
         return
 
     parts = q.data.split("_")
-    action = parts[2]  # confirm / reject
+    action = parts[2]
     order_id = int(parts[3])
 
     order = find_order(order_id)
@@ -575,7 +609,6 @@ async def admin_pay_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(int(order["user_id"]), txt_user)
     except:
         pass
-
     await q.message.reply_text(txt_admin)
 
 # ===================== FREE UC =====================
@@ -587,7 +620,6 @@ async def free_uc_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await chat.send_message("⚠️ Аввал /start кунед.")
         return
 
-    # check subscription
     subscribed = False
     try:
         member = await context.bot.get_chat_member(FREE_UC_CHANNEL, int(uid))
@@ -714,13 +746,12 @@ async def handle_free_claim_id(update: Update, context: ContextTypes.DEFAULT_TYP
 async def admin_free_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-
     if not is_admin(q.from_user.id):
         await q.message.reply_text("🚫 Танҳо админ!")
         return
 
     parts = q.data.split("_")
-    action = parts[2]  # confirm/reject
+    action = parts[2]
     order_id = int(parts[3])
 
     o = find_order(order_id)
@@ -754,11 +785,10 @@ async def invite_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await q.message.reply_text("⚠️ Хато шуд.")
 
-# ===================== BROADCAST (NO DELAY) =====================
+# ===================== BROADCAST =====================
 async def bc_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-
     if not is_admin(q.from_user.id):
         await q.message.reply_text("🚫 Танҳо админ!")
         return
@@ -837,7 +867,6 @@ async def bc_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.message.reply_text("❌ Бекор шуд.")
 
 async def bc_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Only saves photo if admin is in broadcast photo step."""
     if not update.message or not update.message.photo:
         return
     uid = str(update.effective_user.id)
@@ -917,37 +946,51 @@ async def admin_clear_do(update: Update, context: ContextTypes.DEFAULT_TYPE):
     orders.clear()
     user_carts.clear()
     user_wishlist.clear()
-    await q.message.reply_text(f"🗑 Пок шуд: {n} корбар. (orders ҳам тоза шуд)")
+    await q.message.reply_text(f"🗑 Пок шуд: {n} корбар.")
 
 async def admin_clear_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     await q.message.reply_text("✅ Бекор шуд.")
 
-# ===================== MENU TEXT ROUTER =====================
+# ===================== MAIN HANDLER ROUTER =====================
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
     if not anti_spam(context):
         return
 
-    # 1) math challenge
+    # --- BLOCK CHECK FOR ALL MESSAGES ---
+    blocked_until = context.user_data.get("math_blocked_until")
+    if blocked_until:
+        if dt.datetime.now() < blocked_until:
+            diff = blocked_until - dt.datetime.now()
+            minutes_left = int(diff.total_seconds() // 60) + 1
+            await update.message.reply_text(
+                f"🚫 Шумо муваққатан блок ҳастед.\n⏰ {minutes_left} дақиқаи дигар интизор шавед."
+            )
+            return
+        else:
+            # Unblock if time passed
+            context.user_data["math_blocked_until"] = None
+
+    # 1) Math challenge active
     if context.user_data.get("awaiting_math"):
         consumed = await check_math(update, context)
         if consumed:
             return
 
-    # 2) awaiting game id for paid checkout
+    # 2) Paid Checkout ID
     if context.user_data.get("awaiting_game_id"):
         await handle_game_id(update, context)
         return
 
-    # 3) awaiting free claim id
+    # 3) Free UC ID
     if context.user_data.get("awaiting_free_claim"):
         await handle_free_claim_id(update, context)
         return
 
-    # 4) broadcast draft steps (admin)
+    # 4) Broadcast draft steps
     uid = str(update.effective_user.id)
     d = broadcast_draft.get(uid)
     if d and d.get("step") == "text":
@@ -965,7 +1008,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         d["step"] = None
         return
 
-    # 5) menu commands
+    # 5) Main Menu
     text = update.message.text
     user_id = str(update.effective_user.id)
 
@@ -1001,6 +1044,12 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("⏳", show_alert=False)
         return
 
+    # Check block for buttons too
+    blocked_until = context.user_data.get("math_blocked_until")
+    if blocked_until and dt.datetime.now() < blocked_until:
+         await q.answer("🚫 Шумо блок ҳастед!", show_alert=True)
+         return
+
     data = q.data
 
     # catalog
@@ -1031,9 +1080,6 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # admin payment actions
     if data.startswith("admin_pay_confirm_") or data.startswith("admin_pay_reject_"):
-        # format admin_pay_confirm_{id}
-        # we route to admin_pay_action by normalizing
-        # admin_pay_confirm_123 -> admin_pay_confirm_123 (split works in handler)
         await admin_pay_action(update, context); return
 
     # free uc
@@ -1094,14 +1140,8 @@ def main():
 
     app.add_handler(MessageHandler(filters.CONTACT, get_contact))
     app.add_handler(CallbackQueryHandler(callback_router))
-
-    # Broadcast photo handler first (only works if admin step == photo)
     app.add_handler(MessageHandler(filters.PHOTO, bc_photo_handler), group=0)
-
-    # Payment proof handler (photo/document) only if awaiting proof order
     app.add_handler(MessageHandler((filters.PHOTO | filters.Document.ALL) & (~filters.COMMAND), receive_proof), group=1)
-
-    # Text router
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text), group=2)
 
     print("✅ UCstore FULL (botifyhost safe) started")
