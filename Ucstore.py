@@ -26,7 +26,7 @@ ADMIN_IDS = [8436218638]
 ADMIN_TELEGRAM = "https://t.me/MARZBON_TJ"
 ADMIN_INSTAGRAM = "https://www.instagram.com/marzbontj?igsh=MW9yaG9lcm93YjRueA=="
 
-FREE_UC_CHANNEL = "@marzbon_media"  # бояд канали public бошад
+FREE_UC_CHANNEL = "@marzbon_media" 
 VISA_NUMBER = "4439200020432471"
 SBER_NUMBER = "2202208496090011"
 
@@ -76,11 +76,11 @@ ADMIN_INFO = (
 )
 
 # ===================== DATA (RAM ONLY) =====================
-users_data = {}         # user_id(str) -> dict
-orders = []             # list of dict orders
-user_carts = {}         # user_id(str) -> {item_id(int): qty(int)}
-user_wishlist = {}      # user_id(str) -> set(item_id)
-broadcast_draft = {}    # admin_id(str) -> draft dict (text/photo/buttons/step)
+users_data = {}         
+orders = []             
+user_carts = {}         
+user_wishlist = {}      
+broadcast_draft = {}    
 
 # ===================== HELPERS =====================
 def is_admin(uid: int) -> bool:
@@ -89,7 +89,8 @@ def is_admin(uid: int) -> bool:
 def now_str() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-def anti_spam(context: ContextTypes.DEFAULT_TYPE, delay: float = 1.2) -> bool:
+def anti_spam(context: ContextTypes.DEFAULT_TYPE, delay: float = 1.5) -> bool:
+    """Агар корбар тез-тез клик кунад, False бармегардонад."""
     t = time.time()
     last = context.user_data.get("_last_action", 0.0)
     if t - last < delay:
@@ -143,9 +144,9 @@ async def show_main_menu(chat, user_id: str):
         kb.append(["👑 Панели админ"])
     await chat.send_message("Менюи асосӣ:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
 
-# ===================== MATH CHALLENGE (UPDATED) =====================
+# ===================== MATH CHALLENGE =====================
 async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # 1. Check if user is blocked
+    # Санҷиш: оё корбар блок аст?
     blocked_until = context.user_data.get("math_blocked_until")
     if blocked_until:
         if dt.datetime.now() < blocked_until:
@@ -156,10 +157,8 @@ async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         else:
-            # Time is up, remove block
             context.user_data["math_blocked_until"] = None
 
-    # 2. Generate new math problem
     op = random.choice(["+", "-"])
     if op == "+":
         a, b = random.randint(1, 50), random.randint(1, 50)
@@ -180,9 +179,8 @@ async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    # Returns True if the message was consumed by math logic
     if not context.user_data.get("awaiting_math"):
-        # If user is blocked but tries to type something
+        # Санҷиши блок ҳангоми навиштан
         blocked_until = context.user_data.get("math_blocked_until")
         if blocked_until and dt.datetime.now() < blocked_until:
              diff = blocked_until - dt.datetime.now()
@@ -195,9 +193,8 @@ async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
     try:
         val = int(txt)
     except:
-        val = None # invalid input counts as wrong
+        val = None 
 
-    # Correct answer
     if val is not None and val == context.user_data.get("math_ans"):
         context.user_data["awaiting_math"] = False
         context.user_data["math_blocked_until"] = None
@@ -205,21 +202,17 @@ async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
         await show_main_menu(update.effective_chat, str(update.effective_user.id))
         return True
 
-    # Wrong answer
     context.user_data["math_try"] += 1
     left = 3 - context.user_data["math_try"]
 
     if left > 0:
         await update.message.reply_text(f"❌ Нодуруст. {left} кӯшиш монд.")
     else:
-        # FAILED 3 TIMES -> BLOCK FOR 10 MINUTES
         context.user_data["awaiting_math"] = False
         context.user_data["math_blocked_until"] = dt.datetime.now() + dt.timedelta(minutes=10)
-        
         await update.message.reply_text(
-            "🚫 Шумо 3 маротиба хато кардед!\n\n"
-            "⚠️ Барои бехатарӣ, дастрасӣ ба бот барои 10 дақиқа маҳдуд шуд.\n"
-            "Лутфан пас аз 10 дақиқа баргардед ва /start кунед."
+            "🚫 Шумо 3 маротиба хато кардед!\n"
+            "Дастрасӣ барои 10 дақиқа маҳдуд шуд."
         )
     return True
 
@@ -228,18 +221,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     uid = str(user.id)
 
-    # invite payload
+    # 1. Агар корбар аллакай бошад -> РОСТ БА МЕНЮ (дигар санҷиш нест)
+    if uid in users_data:
+        # Танҳо агар блок набошад
+        blocked_until = context.user_data.get("math_blocked_until")
+        if blocked_until and dt.datetime.now() < blocked_until:
+             diff = blocked_until - dt.datetime.now()
+             minutes_left = int(diff.total_seconds() // 60) + 1
+             await update.message.reply_text(f"🚫 Шумо блок ҳастед. {minutes_left} дақиқа сабр кунед.")
+             return
+        
+        # Агар корбар дар ҷараёни санҷиш монда бошад, онро лағв мекунем ва меню медиҳем
+        context.user_data["awaiting_math"] = False
+        await show_main_menu(update.effective_chat, uid)
+        return
+
+    # Payload for invite
     args = context.args
     if args and args[0].startswith("invite_"):
         inviter = args[0].split("_", 1)[1]
         if inviter and inviter != uid:
             context.user_data["invited_by"] = inviter
-
-    if uid in users_data:
-        # If user exists, force math check (unless they just passed it)
-        # Note: In this logic, every /start triggers math.
-        await start_math(update, context)
-        return
 
     btn = KeyboardButton("📱 Ворид шудан бо рақам", request_contact=True)
     await update.message.reply_text(
@@ -267,7 +269,6 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "code": code,
         }
 
-        # inviter bonus
         inviter = context.user_data.get("invited_by")
         if inviter and inviter in users_data and inviter != uid:
             users_data[inviter]["free_uc"] = users_data[inviter].get("free_uc", 0) + 2
@@ -276,7 +277,6 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-        # notify admins
         for admin in ADMIN_IDS:
             try:
                 await context.bot.send_message(
@@ -291,10 +291,10 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove(),
     )
 
-    # Start math challenge
+    # Санҷиш ТАНҲО дар вақти сабти ном
     await start_math(update, context)
 
-# ===================== CATALOG =====================
+# ===================== CATALOG & ACTIONS =====================
 async def catalog_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = update.message or (update.callback_query and update.callback_query.message)
     if not target:
@@ -957,7 +957,10 @@ async def admin_clear_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
+    
+    # --- ANTI SPAM CHECK FOR TEXT ---
     if not anti_spam(context):
+        await update.message.reply_text("⏳ Лутфан тез-тез нанависед. 1-2 сония сабр кунед.")
         return
 
     # --- BLOCK CHECK FOR ALL MESSAGES ---
@@ -971,7 +974,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         else:
-            # Unblock if time passed
             context.user_data["math_blocked_until"] = None
 
     # 1) Math challenge active
@@ -1040,8 +1042,10 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     if not q or not q.data:
         return
-    if not anti_spam(context, delay=0.6):
-        await q.answer("⏳", show_alert=False)
+    
+    # --- ANTI SPAM CHECK FOR BUTTONS ---
+    if not anti_spam(context, delay=1.2):
+        await q.answer("⏳ Лутфан 1-2 сония сабр кунед!", show_alert=True)
         return
 
     # Check block for buttons too
