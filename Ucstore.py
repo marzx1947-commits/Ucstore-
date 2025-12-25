@@ -146,19 +146,9 @@ async def show_main_menu(chat, user_id: str):
 
 # ===================== MATH CHALLENGE =====================
 async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Санҷиш: оё корбар блок аст?
-    blocked_until = context.user_data.get("math_blocked_until")
-    if blocked_until:
-        if dt.datetime.now() < blocked_until:
-            diff = blocked_until - dt.datetime.now()
-            minutes_left = int(diff.total_seconds() // 60) + 1
-            await update.effective_chat.send_message(
-                f"🚫 Шумо блок шудед! Лутфан пас аз {minutes_left} дақиқа дубора кӯшиш кунед."
-            )
-            return
-        else:
-            context.user_data["math_blocked_until"] = None
-
+    # Ин функсия танҳо мисоли навро месозад ва мефиристад.
+    # Санҷиши вақти блокро мо дар handle_text/start мекунем.
+    
     op = random.choice(["+", "-"])
     if op == "+":
         a, b = random.randint(1, 50), random.randint(1, 50)
@@ -179,15 +169,20 @@ async def start_math(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    # 1. Агар корбар мунтазири математика набошад -> False
     if not context.user_data.get("awaiting_math"):
-        # Санҷиши блок ҳангоми навиштан
-        blocked_until = context.user_data.get("math_blocked_until")
-        if blocked_until and dt.datetime.now() < blocked_until:
+        return False
+
+    # 2. Агар корбар блок бошад (вақт ҳанӯз нагузаштааст)
+    blocked_until = context.user_data.get("math_blocked_until")
+    if blocked_until:
+         # Ин қисм одатан кор намекунад, чунки агар блок бошад, awaiting_math False мешавад.
+         # Аммо барои эҳтиёт мемонем:
+         if dt.datetime.now() < blocked_until:
              diff = blocked_until - dt.datetime.now()
              minutes_left = int(diff.total_seconds() // 60) + 1
              await update.message.reply_text(f"⏳ Шумо блок ҳастед. {minutes_left} дақиқаи дигар сабр кунед.")
              return True
-        return False
 
     txt = (update.message.text or "").strip()
     try:
@@ -195,6 +190,7 @@ async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
     except:
         val = None 
 
+    # Ҷавоби дуруст
     if val is not None and val == context.user_data.get("math_ans"):
         context.user_data["awaiting_math"] = False
         context.user_data["math_blocked_until"] = None
@@ -202,17 +198,21 @@ async def check_math(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
         await show_main_menu(update.effective_chat, str(update.effective_user.id))
         return True
 
+    # Ҷавоби хато
     context.user_data["math_try"] += 1
     left = 3 - context.user_data["math_try"]
 
     if left > 0:
         await update.message.reply_text(f"❌ Нодуруст. {left} кӯшиш монд.")
     else:
-        context.user_data["awaiting_math"] = False
+        # FAILED 3 TIMES -> BLOCK & REMOVE AWAITING STATUS
+        context.user_data["awaiting_math"] = False 
         context.user_data["math_blocked_until"] = dt.datetime.now() + dt.timedelta(minutes=10)
+        
         await update.message.reply_text(
             "🚫 Шумо 3 маротиба хато кардед!\n"
-            "Дастрасӣ барои 10 дақиқа маҳдуд шуд."
+            "⚠️ Дастрасӣ барои 10 дақиқа маҳдуд шуд.\n"
+            "Баъди 10 дақиқа боз кӯшиш кунед."
         )
     return True
 
@@ -221,18 +221,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     uid = str(user.id)
 
-    # 1. Агар корбар аллакай бошад -> РОСТ БА МЕНЮ (дигар санҷиш нест)
+    # --- 1. Check Block Logic ---
+    blocked_until = context.user_data.get("math_blocked_until")
+    if blocked_until:
+        if dt.datetime.now() < blocked_until:
+            # Still blocked
+            diff = blocked_until - dt.datetime.now()
+            minutes_left = int(diff.total_seconds() // 60) + 1
+            await update.message.reply_text(f"🚫 Шумо блок ҳастед. {minutes_left} дақиқа сабр кунед.")
+            return
+        else:
+            # Time is up -> FORCE MATH RE-TEST
+            context.user_data["math_blocked_until"] = None
+            await update.message.reply_text("⌛️ Вақти блок тамом шуд. Акнун санҷишро такрор кунед.")
+            await start_math(update, context)
+            return
+
+    # --- 2. If blocked logic didn't return, check if user exists ---
     if uid in users_data:
-        # Танҳо агар блок набошад
-        blocked_until = context.user_data.get("math_blocked_until")
-        if blocked_until and dt.datetime.now() < blocked_until:
-             diff = blocked_until - dt.datetime.now()
-             minutes_left = int(diff.total_seconds() // 60) + 1
-             await update.message.reply_text(f"🚫 Шумо блок ҳастед. {minutes_left} дақиқа сабр кунед.")
+        # Агар корбар дар нимаи санҷиш бошад (awaiting_math=True), менюро нишон намедиҳем
+        if context.user_data.get("awaiting_math"):
+             await update.message.reply_text("🔢 Лутфан аввал ҷавоби мисолро нависед:")
              return
         
-        # Агар корбар дар ҷараёни санҷиш монда бошад, онро лағв мекунем ва меню медиҳем
-        context.user_data["awaiting_math"] = False
+        # Ҳама чиз хуб аст -> Меню
         await show_main_menu(update.effective_chat, uid)
         return
 
@@ -291,7 +303,7 @@ async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove(),
     )
 
-    # Санҷиш ТАНҲО дар вақти сабти ном
+    # Аввалин бор сабт шуд -> Санҷиш
     await start_math(update, context)
 
 # ===================== CATALOG & ACTIONS =====================
@@ -974,7 +986,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         else:
+            # Time is up -> FORCE RETAKE OF MATH
             context.user_data["math_blocked_until"] = None
+            await update.message.reply_text("⌛️ Вақти блок тамом шуд. Акнун санҷишро такрор кунед.")
+            await start_math(update, context)
+            return
 
     # 1) Math challenge active
     if context.user_data.get("awaiting_math"):
@@ -1050,9 +1066,17 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check block for buttons too
     blocked_until = context.user_data.get("math_blocked_until")
-    if blocked_until and dt.datetime.now() < blocked_until:
-         await q.answer("🚫 Шумо блок ҳастед!", show_alert=True)
-         return
+    if blocked_until:
+         if dt.datetime.now() < blocked_until:
+             await q.answer("🚫 Шумо блок ҳастед!", show_alert=True)
+             return
+         else:
+             # Time up -> Force text retake message (can't force text input via button click easily, 
+             # so we just tell them to type /start or something)
+             await q.answer("⌛️ Вақт тамом. Лутфан /start кунед.", show_alert=True)
+             # We clear the block so next text input triggers math
+             context.user_data["math_blocked_until"] = None
+             return
 
     data = q.data
 
